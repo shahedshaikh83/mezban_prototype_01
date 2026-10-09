@@ -1,0 +1,844 @@
+const express = require('express');
+const cors = require('cors');
+const { db, initDatabase } = require('./db');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json());
+
+// Initialize SQLite database and tables
+initDatabase();
+
+// -------------------------------------------------------------
+// 1. STATS / EXECUTIVE SUMMARY
+// -------------------------------------------------------------
+app.get('/api/stats', (req, res) => {
+  try {
+    const totalEvents = db.prepare('SELECT COUNT(*) as count FROM events').get().count;
+    const activeEvents = db.prepare("SELECT COUNT(*) as count FROM events WHERE status NOT IN ('Completed', 'Cancelled')").get().count;
+    const completedEvents = db.prepare("SELECT COUNT(*) as count FROM events WHERE status = 'Completed'").get().count;
+    const totalCustomers = db.prepare('SELECT COUNT(*) as count FROM customers').get().count;
+    const totalVendors = db.prepare('SELECT COUNT(*) as count FROM vendors').get().count;
+    const verifiedVendors = db.prepare("SELECT COUNT(*) as count FROM vendors WHERE verification_status = 'Verified'").get().count;
+    const totalVenues = db.prepare('SELECT COUNT(*) as count FROM venues').get().count;
+
+    // Financial calculations
+    const approvedQuotes = db.prepare(`
+      SELECT 
+        COALESCE(SUM(total_price), 0) as total_billed,
+        COALESCE(SUM(total_cost), 0) as total_cost,
+        COALESCE(SUM(mezbaan_margin), 0) as total_margin
+      FROM quotes 
+      WHERE status = 'Approved'
+    `).get();
+
+    const customerPayments = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total_received
+      FROM payments 
+      WHERE payment_type LIKE 'Customer%' AND status = 'Completed'
+    `).get().total_received;
+
+    const vendorPayments = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total_disbursed
+      FROM payments 
+      WHERE payment_type LIKE 'Vendor%' AND status = 'Completed'
+    `).get().total_disbursed;
+
+    const directExpenses = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total_expenses
+      FROM expenses
+    `).get().total_expenses;
+
+    const grossContribution = approvedQuotes.total_billed - approvedQuotes.total_cost - directExpenses;
+    const marginPercent = approvedQuotes.total_billed > 0 
+      ? Math.round((grossContribution / approvedQuotes.total_billed) * 100) 
+      : 0;
+
+    res.json({
+      success: true,
+      stats: {
+        totalEvents,
+        activeEvents,
+        completedEvents,
+        totalCustomers,
+        totalVendors,
+        verifiedVendors,
+        totalVenues,
+        financials: {
+          totalBilled: approvedQuotes.total_billed,
+          customerPaid: customerPayments,
+          customerOutstanding: Math.max(0, approvedQuotes.total_billed - customerPayments),
+          vendorAgreedCost: approvedQuotes.total_cost,
+          vendorPaid: vendorPayments,
+          vendorOutstanding: Math.max(0, approvedQuotes.total_cost - vendorPayments),
+          directExpenses: directExpenses,
+          grossContribution,
+          marginPercent
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 2. EVENTS
+// -------------------------------------------------------------
+app.get('/api/events', (req, res) => {
+  try {
+    const { status, customer_id } = req.query;
+    let query = `
+      SELECT 
+        e.*, 
+        c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
+        v.name as venue_name, v.city as venue_city, v.capacity as venue_capacity,
+        (SELECT COUNT(*) FROM event_requirements er WHERE er.event_id = e.event_id) as requirements_count,
+        (SELECT q.total_price FROM quotes q WHERE q.event_id = e.event_id ORDER BY q.quote_id DESC LIMIT 1) as quote_price,
+        (SELECT q.status FROM quotes q WHERE q.event_id = e.event_id ORDER BY q.quote_id DESC LIMIT 1) as quote_status,
+        (SELECT COALESCE(SUM(p.amount), 0) FROM payments p WHERE p.event_id = e.event_id AND p.payment_type LIKE 'Customer%') as amount_paid
+      FROM events e
+      LEFT JOIN customers c ON e.customer_id = c.customer_id
+      LEFT JOIN venues v ON e.venue_id = v.venue_id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (status) {
+      query += ' AND e.status = ?';
+      params.push(status);
+    }
+    if (customer_id) {
+      query += ' AND e.customer_id = ?';
+      params.push(customer_id);
+    }
+
+    query += ' ORDER BY e.event_date ASC';
+
+    const events = db.prepare(query).all(...params);
+    res.json({ success: true, events });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/events/:id', (req, res) => {
+  try {
+    const event = db.prepare(`
+      SELECT 
+        e.*, 
+        c.name as customer_name, c.phone as customer_phone, c.email as customer_email, c.address as customer_address,
+        v.name as venue_name, v.address as venue_address, v.city as venue_city, v.capacity as venue_capacity, v.facilities as venue_facilities
+      FROM events e
+      LEFT JOIN customers c ON e.customer_id = c.customer_id
+      LEFT JOIN venues v ON e.venue_id = v.venue_id
+      WHERE e.event_id = ?
+    `).get(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+
+    // Requirements
+    const requirements = db.prepare(`
+      SELECT er.*, s.name as service_name, sc.name as category_name
+      FROM event_requirements er
+      LEFT JOIN services s ON er.service_id = s.service_id
+      LEFT JOIN service_categories sc ON s.category_id = sc.category_id
+      WHERE er.event_id = ?
+    `).all(req.params.id);
+
+    // Quotes
+    const quotes = db.prepare(`
+      SELECT * FROM quotes WHERE event_id = ? ORDER BY quote_id DESC
+    `).all(req.params.id);
+
+    // For each quote get items
+    quotes.forEach(q => {
+      q.items = db.prepare(`
+        SELECT qi.*, s.name as service_name, v.business_name as vendor_name
+        FROM quote_items qi
+        LEFT JOIN services s ON qi.service_id = s.service_id
+        LEFT JOIN vendors v ON qi.vendor_id = v.vendor_id
+        WHERE qi.quote_id = ?
+      `).all(q.quote_id);
+    });
+
+    // Bookings
+    const bookings = db.prepare(`
+      SELECT b.*, v.business_name as vendor_name, v.contact_person, v.phone as vendor_phone
+      FROM bookings b
+      LEFT JOIN vendors v ON b.vendor_id = v.vendor_id
+      WHERE b.event_id = ?
+    `).all(req.params.id);
+
+    // Payments
+    const payments = db.prepare(`
+      SELECT * FROM payments WHERE event_id = ? ORDER BY paid_on DESC
+    `).all(req.params.id);
+
+    // Expenses
+    const expenses = db.prepare(`
+      SELECT * FROM expenses WHERE event_id = ? ORDER BY spent_on DESC
+    `).all(req.params.id);
+
+    res.json({
+      success: true,
+      event,
+      requirements,
+      quotes,
+      bookings,
+      payments,
+      expenses
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/events', (req, res) => {
+  try {
+    const { customer_id, venue_id, event_type, event_date, location, guest_count, budget, status } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO events (customer_id, venue_id, event_type, event_date, location, guest_count, budget, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const info = stmt.run(customer_id, venue_id || null, event_type, event_date, location || 'Beed', guest_count || 100, budget || 0, status || 'Enquiry');
+    res.json({ success: true, event_id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/events/:id', (req, res) => {
+  try {
+    const { venue_id, event_type, event_date, location, guest_count, budget, status } = req.body;
+    const stmt = db.prepare(`
+      UPDATE events 
+      SET venue_id = ?, event_type = ?, event_date = ?, location = ?, guest_count = ?, budget = ?, status = ?
+      WHERE event_id = ?
+    `);
+    stmt.run(venue_id || null, event_type, event_date, location, guest_count, budget, status, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/events/:id/requirements', (req, res) => {
+  try {
+    const { service_id, details, quantity, status } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO event_requirements (event_id, service_id, details, quantity, status)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const info = stmt.run(req.params.id, service_id, details, quantity || 1, status || 'Pending');
+    res.json({ success: true, requirement_id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 3. PUBLIC ENQUIRY / LEAD GENERATOR
+// -------------------------------------------------------------
+app.post('/api/enquiries', (req, res) => {
+  try {
+    const {
+      name,
+      phone,
+      email,
+      address,
+      event_type,
+      event_date,
+      location,
+      guest_count,
+      budget,
+      venue_id,
+      selected_services, // array of service_ids
+      special_requirements
+    } = req.body;
+
+    if (!name || !phone || !event_type || !event_date) {
+      return res.status(400).json({ success: false, message: 'Name, phone, event type, and date are required' });
+    }
+
+    // 1. Find or create customer
+    let customer = db.prepare('SELECT customer_id FROM customers WHERE phone = ?').get(phone);
+    let customerId;
+    if (customer) {
+      customerId = customer.customer_id;
+      db.prepare('UPDATE customers SET name = ?, email = COALESCE(?, email), address = COALESCE(?, address), updated_at = CURRENT_TIMESTAMP WHERE customer_id = ?')
+        .run(name, email || null, address || null, customerId);
+    } else {
+      const custStmt = db.prepare(`
+        INSERT INTO customers (name, phone, email, address, status)
+        VALUES (?, ?, ?, ?, 'Active')
+      `);
+      const info = custStmt.run(name, phone, email || null, address || null);
+      customerId = info.lastInsertRowid;
+    }
+
+    // 2. Create Event
+    const eventStmt = db.prepare(`
+      INSERT INTO events (customer_id, venue_id, event_type, event_date, location, guest_count, budget, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'Enquiry')
+    `);
+    const eventInfo = eventStmt.run(
+      customerId,
+      venue_id || null,
+      event_type,
+      event_date,
+      location || 'Beed',
+      guest_count || 100,
+      budget || 0
+    );
+    const eventId = eventInfo.lastInsertRowid;
+
+    // 3. Insert requirements for selected services
+    if (Array.isArray(selected_services) && selected_services.length > 0) {
+      const reqStmt = db.prepare(`
+        INSERT INTO event_requirements (event_id, service_id, details, quantity, status)
+        VALUES (?, ?, ?, 1, 'Pending')
+      `);
+      for (const serviceId of selected_services) {
+        reqStmt.run(eventId, serviceId, special_requirements || 'Initial requirement submitted via website');
+      }
+    } else if (special_requirements) {
+      // Default to general coordination service if no specific selected
+      const reqStmt = db.prepare(`
+        INSERT INTO event_requirements (event_id, service_id, details, quantity, status)
+        VALUES (?, 1, ?, 1, 'Pending')
+      `);
+      reqStmt.run(eventId, special_requirements);
+    }
+
+    res.json({
+      success: true,
+      event_id: eventId,
+      event_code: `MEZ-EVT-2026-${String(eventId).padStart(4, '0')}`,
+      message: 'Event enquiry registered successfully! Our event coordinator will contact you shortly.'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 4. CUSTOMERS
+// -------------------------------------------------------------
+app.get('/api/customers', (req, res) => {
+  try {
+    const customers = db.prepare(`
+      SELECT 
+        c.*, 
+        COUNT(e.event_id) as total_events
+      FROM customers c
+      LEFT JOIN events e ON c.customer_id = e.customer_id
+      GROUP BY c.customer_id
+      ORDER BY c.created_at DESC
+    `).all();
+    res.json({ success: true, customers });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/customers', (req, res) => {
+  try {
+    const { name, phone, email, address, status } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO customers (name, phone, email, address, status)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const info = stmt.run(name, phone, email || null, address || null, status || 'Active');
+    res.json({ success: true, customer_id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 5. VENUES
+// -------------------------------------------------------------
+app.get('/api/venues', (req, res) => {
+  try {
+    const { city } = req.query;
+    let query = 'SELECT * FROM venues WHERE 1=1';
+    const params = [];
+    if (city) {
+      query += ' AND city = ?';
+      params.push(city);
+    }
+    query += ' ORDER BY capacity DESC';
+    const venues = db.prepare(query).all(...params);
+    res.json({ success: true, venues });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/venues', (req, res) => {
+  try {
+    const { name, address, city, capacity, facilities, status } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO venues (name, address, city, capacity, facilities, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const info = stmt.run(name, address, city, capacity, facilities, status || 'Active');
+    res.json({ success: true, venue_id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 6. VENDORS & VENDOR SERVICES
+// -------------------------------------------------------------
+app.get('/api/vendors', (req, res) => {
+  try {
+    const vendors = db.prepare('SELECT * FROM vendors ORDER BY rating DESC, business_name ASC').all();
+    
+    // Attach services for each vendor
+    const getServices = db.prepare(`
+      SELECT vs.*, s.name as service_name, sc.name as category_name
+      FROM vendor_services vs
+      JOIN services s ON vs.service_id = s.service_id
+      JOIN service_categories sc ON s.category_id = sc.category_id
+      WHERE vs.vendor_id = ?
+    `);
+
+    vendors.forEach(v => {
+      v.services = getServices.all(v.vendor_id);
+    });
+
+    res.json({ success: true, vendors });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/vendors', (req, res) => {
+  try {
+    const { business_name, contact_person, phone, email, city, verification_status, rating, status, services } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO vendors (business_name, contact_person, phone, email, city, verification_status, rating, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const info = stmt.run(
+      business_name,
+      contact_person,
+      phone,
+      email || null,
+      city || 'Beed',
+      verification_status || 'Under Review',
+      rating || 4.5,
+      status || 'Active'
+    );
+    const vendorId = info.lastInsertRowid;
+
+    if (Array.isArray(services) && services.length > 0) {
+      const vsStmt = db.prepare(`
+        INSERT INTO vendor_services (vendor_id, service_id, base_price, capacity)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const s of services) {
+        vsStmt.run(vendorId, s.service_id, s.base_price || 0, s.capacity || 1);
+      }
+    }
+
+    res.json({ success: true, vendor_id: vendorId });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/vendors/:id/verify', (req, res) => {
+  try {
+    const { verification_status, rating, status } = req.body;
+    const stmt = db.prepare(`
+      UPDATE vendors 
+      SET verification_status = COALESCE(?, verification_status),
+          rating = COALESCE(?, rating),
+          status = COALESCE(?, status)
+      WHERE vendor_id = ?
+    `);
+    stmt.run(verification_status, rating, status, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 7. SERVICES & CATEGORIES
+// -------------------------------------------------------------
+app.get('/api/services', (req, res) => {
+  try {
+    const categories = db.prepare('SELECT * FROM service_categories ORDER BY category_id ASC').all();
+    const services = db.prepare(`
+      SELECT s.*, sc.name as category_name
+      FROM services s
+      LEFT JOIN service_categories sc ON s.category_id = sc.category_id
+      ORDER BY s.category_id ASC, s.name ASC
+    `).all();
+
+    res.json({ success: true, categories, services });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 8. QUOTES & QUOTE ITEMS (Costing, Margins, Approval)
+// -------------------------------------------------------------
+app.get('/api/quotes', (req, res) => {
+  try {
+    const quotes = db.prepare(`
+      SELECT q.*, e.event_type, e.event_date, e.location, c.name as customer_name, c.phone as customer_phone
+      FROM quotes q
+      JOIN events e ON q.event_id = e.event_id
+      JOIN customers c ON e.customer_id = c.customer_id
+      ORDER BY q.quote_id DESC
+    `).all();
+
+    quotes.forEach(q => {
+      q.items = db.prepare(`
+        SELECT qi.*, s.name as service_name, v.business_name as vendor_name
+        FROM quote_items qi
+        LEFT JOIN services s ON qi.service_id = s.service_id
+        LEFT JOIN vendors v ON qi.vendor_id = v.vendor_id
+        WHERE qi.quote_id = ?
+      `).all(q.quote_id);
+    });
+
+    res.json({ success: true, quotes });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/quotes', (req, res) => {
+  try {
+    const { event_id, items, valid_until, status } = req.body;
+    if (!event_id || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Event ID and items array are required' });
+    }
+
+    let totalCost = 0;
+    let totalPrice = 0;
+
+    items.forEach(it => {
+      totalCost += parseFloat(it.vendor_cost || 0);
+      totalPrice += parseFloat(it.customer_price || 0);
+    });
+
+    const mezbaanMargin = totalPrice - totalCost;
+
+    const quoteStmt = db.prepare(`
+      INSERT INTO quotes (event_id, total_cost, mezbaan_margin, total_price, status, valid_until)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const quoteInfo = quoteStmt.run(
+      event_id,
+      totalCost,
+      mezbaanMargin,
+      totalPrice,
+      status || 'Sent',
+      valid_until || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+    );
+    const quoteId = quoteInfo.lastInsertRowid;
+
+    const itemStmt = db.prepare(`
+      INSERT INTO quote_items (quote_id, vendor_id, service_id, vendor_cost, customer_price)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    for (const it of items) {
+      itemStmt.run(quoteId, it.vendor_id || null, it.service_id, it.vendor_cost, it.customer_price);
+    }
+
+    // Update event status to 'Quotation Sent' if currently 'Enquiry' or 'Planning'
+    db.prepare("UPDATE events SET status = 'Quotation Sent' WHERE event_id = ? AND status IN ('Enquiry', 'Planning')").run(event_id);
+
+    res.json({ success: true, quote_id: quoteId, total_cost: totalCost, mezbaan_margin: mezbaanMargin, total_price: totalPrice });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/quotes/:id/status', (req, res) => {
+  try {
+    const { status } = req.body; // 'Approved', 'Rejected', 'Revised'
+    const quote = db.prepare('SELECT * FROM quotes WHERE quote_id = ?').get(req.params.id);
+    if (!quote) {
+      return res.status(404).json({ success: false, message: 'Quote not found' });
+    }
+
+    db.prepare('UPDATE quotes SET status = ? WHERE quote_id = ?').run(status, req.params.id);
+
+    // If Approved, update event status to 'Confirmed' and auto-create Bookings for each vendor item!
+    if (status === 'Approved') {
+      db.prepare("UPDATE events SET status = 'Confirmed' WHERE event_id = ?").run(quote.event_id);
+
+      const items = db.prepare('SELECT * FROM quote_items WHERE quote_id = ? AND vendor_id IS NOT NULL').all(quote.quote_id);
+      const bookingStmt = db.prepare(`
+        INSERT INTO bookings (event_id, vendor_id, quote_id, agreed_amount, status, booked_on)
+        VALUES (?, ?, ?, ?, 'Confirmed', CURRENT_DATE)
+      `);
+
+      for (const it of items) {
+        // Check if booking already exists for this event and vendor
+        const existing = db.prepare('SELECT booking_id FROM bookings WHERE event_id = ? AND vendor_id = ?').get(quote.event_id, it.vendor_id);
+        if (!existing) {
+          bookingStmt.run(quote.event_id, it.vendor_id, quote.quote_id, it.vendor_cost);
+        }
+      }
+    }
+
+    res.json({ success: true, status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 9. BOOKINGS
+// -------------------------------------------------------------
+app.get('/api/bookings', (req, res) => {
+  try {
+    const { vendor_id, event_id } = req.query;
+    let query = `
+      SELECT 
+        b.*, 
+        e.event_type, e.event_date, e.location as event_location, e.status as event_status,
+        c.name as customer_name,
+        v.business_name as vendor_name, v.contact_person, v.phone as vendor_phone
+      FROM bookings b
+      JOIN events e ON b.event_id = e.event_id
+      JOIN customers c ON e.customer_id = c.customer_id
+      JOIN vendors v ON b.vendor_id = v.vendor_id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (vendor_id) {
+      query += ' AND b.vendor_id = ?';
+      params.push(vendor_id);
+    }
+    if (event_id) {
+      query += ' AND b.event_id = ?';
+      params.push(event_id);
+    }
+    query += ' ORDER BY b.booking_id DESC';
+
+    const bookings = db.prepare(query).all(...params);
+    res.json({ success: true, bookings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/bookings', (req, res) => {
+  try {
+    const { event_id, vendor_id, quote_id, agreed_amount, status } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO bookings (event_id, vendor_id, quote_id, agreed_amount, status, booked_on)
+      VALUES (?, ?, ?, ?, ?, CURRENT_DATE)
+    `);
+    const info = stmt.run(event_id, vendor_id, quote_id || null, agreed_amount, status || 'Confirmed');
+    res.json({ success: true, booking_id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 10. PAYMENTS (Customer & Vendor)
+// -------------------------------------------------------------
+app.get('/api/payments', (req, res) => {
+  try {
+    const payments = db.prepare(`
+      SELECT 
+        p.*, 
+        e.event_type, e.event_date,
+        c.name as customer_name,
+        v.business_name as vendor_name
+      FROM payments p
+      JOIN events e ON p.event_id = e.event_id
+      JOIN customers c ON e.customer_id = c.customer_id
+      LEFT JOIN bookings b ON p.booking_id = b.booking_id
+      LEFT JOIN vendors v ON b.vendor_id = v.vendor_id
+      ORDER BY p.payment_id DESC
+    `).all();
+    res.json({ success: true, payments });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/payments', (req, res) => {
+  try {
+    const { event_id, booking_id, amount, payment_type, method, paid_on, status } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO payments (event_id, booking_id, amount, payment_type, method, paid_on, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const info = stmt.run(
+      event_id,
+      booking_id || null,
+      amount,
+      payment_type, // 'Customer Advance', 'Customer Final', 'Vendor Advance', 'Vendor Balance'
+      method || 'UPI',
+      paid_on || new Date().toISOString().split('T')[0],
+      status || 'Completed'
+    );
+    res.json({ success: true, payment_id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 11. EXPENSES (Direct Event Expenses)
+// -------------------------------------------------------------
+app.get('/api/expenses', (req, res) => {
+  try {
+    const expenses = db.prepare(`
+      SELECT 
+        ex.*, 
+        e.event_type, e.event_date,
+        v.business_name as vendor_name
+      FROM expenses ex
+      JOIN events e ON ex.event_id = e.event_id
+      LEFT JOIN vendors v ON ex.vendor_id = v.vendor_id
+      ORDER BY ex.expense_id DESC
+    `).all();
+    res.json({ success: true, expenses });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/expenses', (req, res) => {
+  try {
+    const { event_id, vendor_id, booking_id, description, amount, spent_on } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO expenses (event_id, vendor_id, booking_id, description, amount, spent_on)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const info = stmt.run(
+      event_id,
+      vendor_id || null,
+      booking_id || null,
+      description,
+      amount,
+      spent_on || new Date().toISOString().split('T')[0]
+    );
+    res.json({ success: true, expense_id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 12. DATABASE EXPLORER & ER DIAGRAM INSPECTOR
+// -------------------------------------------------------------
+app.get('/api/database/overview', (req, res) => {
+  try {
+    const tables = [
+      'venues',
+      'customers',
+      'service_categories',
+      'services',
+      'events',
+      'event_requirements',
+      'vendors',
+      'vendor_services',
+      'quotes',
+      'quote_items',
+      'bookings',
+      'payments',
+      'expenses'
+    ];
+
+    const result = tables.map(table => {
+      const count = db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get().count;
+      const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+      return {
+        table,
+        count,
+        columns: columns.map(c => ({
+          name: c.name,
+          type: c.type,
+          pk: c.pk === 1,
+          notnull: c.notnull === 1
+        }))
+      };
+    });
+
+    res.json({ success: true, tables: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/database/table/:name', (req, res) => {
+  try {
+    const tableName = req.params.name;
+    const allowed = [
+      'venues', 'customers', 'service_categories', 'services', 
+      'events', 'event_requirements', 'vendors', 'vendor_services', 
+      'quotes', 'quote_items', 'bookings', 'payments', 'expenses'
+    ];
+    if (!allowed.includes(tableName)) {
+      return res.status(400).json({ success: false, message: 'Invalid table name' });
+    }
+
+    const rows = db.prepare(`SELECT * FROM ${tableName} LIMIT 100`).all();
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+
+    res.json({
+      success: true,
+      tableName,
+      columns,
+      rows
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'online',
+    app: 'MEZBAAN Events Technology Platform',
+    version: '1.0.0',
+    market: 'Beed, Kaij, Ambajogai, Gevrai, Maharashtra'
+  });
+});
+
+// Serve frontend build if available
+const path = require('path');
+const distPath = path.join(__dirname, '../frontend/dist');
+app.use(express.static(distPath));
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  const indexPath = path.join(distPath, 'index.html');
+  res.sendFile(indexPath, err => {
+    if (err) next();
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`MEZBAAN Unified Server running on http://localhost:${PORT}`);
+});
+
