@@ -52,8 +52,8 @@ app.get('/api/stats', (req, res) => {
     `).get().total_expenses;
 
     const grossContribution = approvedQuotes.total_billed - approvedQuotes.total_cost - directExpenses;
-    const marginPercent = approvedQuotes.total_billed > 0 
-      ? Math.round((grossContribution / approvedQuotes.total_billed) * 100) 
+    const marginPercent = approvedQuotes.total_billed > 0
+      ? Math.round((grossContribution / approvedQuotes.total_billed) * 100)
       : 0;
 
     res.json({
@@ -402,7 +402,7 @@ app.post('/api/venues', (req, res) => {
 app.get('/api/vendors', (req, res) => {
   try {
     const vendors = db.prepare('SELECT * FROM vendors ORDER BY rating DESC, business_name ASC').all();
-    
+
     // Attach services for each vendor
     const getServices = db.prepare(`
       SELECT vs.*, s.name as service_name, sc.name as category_name
@@ -791,8 +791,8 @@ app.get('/api/database/table/:name', (req, res) => {
   try {
     const tableName = req.params.name;
     const allowed = [
-      'venues', 'customers', 'service_categories', 'services', 
-      'events', 'event_requirements', 'vendors', 'vendor_services', 
+      'venues', 'customers', 'service_categories', 'services',
+      'events', 'event_requirements', 'vendors', 'vendor_services',
       'quotes', 'quote_items', 'bookings', 'payments', 'expenses'
     ];
     if (!allowed.includes(tableName)) {
@@ -823,16 +823,18 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve frontend build if available
+// Serve frontend build if availablez
 const path = require('path');
 const distPath = path.join(__dirname, '../frontend/dist');
 app.use(express.static(distPath));
 
-app.get('*', (req, res, next) => {
+app.get('/{*splat}', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
   }
+
   const indexPath = path.join(distPath, 'index.html');
+
   res.sendFile(indexPath, err => {
     if (err) next();
   });
