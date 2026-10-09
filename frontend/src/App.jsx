@@ -8,13 +8,20 @@ import VendorPortal from './pages/VendorPortal';
 import AdminPortal from './pages/AdminPortal';
 import DatabaseExplorer from './pages/DatabaseExplorer';
 
+import CustomerRequirementSheet from './components/CustomerRequirementSheet';
+
 export default function App() {
   const [activePortal, setActivePortal] = useState('website');
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [isRequirementSheetOpen, setIsRequirementSheetOpen] = useState(false);
 
   const handleEventCreated = (eventInfo) => {
-    // Keep modal open with confirmation or switch portal
     console.log('Event successfully registered:', eventInfo);
+  };
+
+  const openRequirementSheet = () => {
+    setActivePortal('admin');
+    setIsRequirementSheetOpen(true);
   };
 
   return (
@@ -24,6 +31,7 @@ export default function App() {
         activePortal={activePortal}
         setActivePortal={setActivePortal}
         openPlanModal={() => setIsPlanModalOpen(true)}
+        openRequirementSheet={openRequirementSheet}
       />
 
       {/* Main View Router */}
@@ -66,6 +74,27 @@ export default function App() {
         onClose={() => setIsPlanModalOpen(false)}
         onEventCreated={handleEventCreated}
       />
+
+      {/* Admin Customer Event Requirement & Discussion Sheet */}
+      {isRequirementSheetOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: '#fbf9f5',
+          zIndex: 9999,
+          overflowY: 'auto'
+        }}>
+          <CustomerRequirementSheet
+            onClose={() => setIsRequirementSheetOpen(false)}
+            onSaved={() => {
+              // Can refresh or trigger update
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

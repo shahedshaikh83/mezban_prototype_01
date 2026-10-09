@@ -746,7 +746,530 @@ app.post('/api/expenses', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 12. DATABASE EXPLORER & ER DIAGRAM INSPECTOR
+// 12. CUSTOMER REQUIREMENT SHEETS & AUTOMATED QUOTATION ENGINE
+// -------------------------------------------------------------
+
+// Calculate smart quotation from form requirements using database vendors & pricing
+app.post('/api/quotations/calculate', (req, res) => {
+  try {
+    const data = req.body;
+    const guestCount = parseInt(data.approxGuestCount || data.guestCount || 300, 10);
+    const eventType = data.eventType || 'Wedding / Event';
+    const items = [];
+
+    // 1. Catering Calculation
+    const cateringNeeded = data.cateringRequired === 'Yes' || data.cateringRequired === 'Need Mezban to arrange' || !data.cateringRequired;
+    if (cateringNeeded && data.cateringRequired !== 'No') {
+      const foodPref = data.foodPreference || 'Both Veg & Non-Veg';
+      const foodBudgetPerPerson = parseFloat(data.approxFoodBudget) || (foodPref === 'Veg' ? 290 : 380);
+
+      // Find caterer from DB
+      const caterer = db.prepare(`
+        SELECT v.vendor_id, v.business_name, vs.service_id, s.name as service_name, vs.base_price
+        FROM vendors v
+        JOIN vendor_services vs ON v.vendor_id = vs.vendor_id
+        JOIN services s ON vs.service_id = s.service_id
+        WHERE s.category_id = 2
+        LIMIT 1
+      `).get();
+
+      const unitVendorCost = caterer?.base_price ? parseFloat(caterer.base_price) : (foodBudgetPerPerson * 0.82);
+      const totalVendorCost = Math.round(unitVendorCost * guestCount);
+      const marginPct = 20;
+      const totalCustomerPrice = Math.round(totalVendorCost * (1 + marginPct / 100));
+
+      const meals = Array.isArray(data.meals) && data.meals.length > 0 ? data.meals.join(', ') : 'Dinner';
+      const cuisines = Array.isArray(data.cuisines) && data.cuisines.length > 0 ? data.cuisines.join(', ') : 'Authentic Beed Mughlai / Dum Biryani';
+
+      items.push({
+        service_id: caterer?.service_id || 2,
+        service_name: `Catering (${foodPref}) - ${meals}`,
+        category: 'Catering & Dastarkhwan',
+        vendor_id: caterer?.vendor_id || 1,
+        vendor_name: caterer?.business_name || 'Royal Beed Dastarkhwan & Caterers',
+        vendor_cost: totalVendorCost,
+        margin_pct: marginPct,
+        customer_price: totalCustomerPrice,
+        details: `${guestCount} Guests @ ₹${Math.round(totalCustomerPrice / guestCount)}/person (${cuisines})`
+      });
+    }
+
+    // 2. Venue Booking / Liaison
+    const needVenue = data.venueSelected === 'No' || data.venueSelected === 'Need Mezban to find venue' || data.venueSelected === 'Shortlisted';
+    if (needVenue || data.venueName) {
+      const preferredVenue = db.prepare('SELECT * FROM venues WHERE city = ? OR city = ? LIMIT 1').get(data.venueArea || 'Beed', 'Beed');
+      const venueCost = parseFloat(data.maxVenueBudget) ? Math.round(parseFloat(data.maxVenueBudget) * 0.85) : 50000;
+      const venuePrice = parseFloat(data.maxVenueBudget) || 60000;
+      const venueMargin = Math.round(((venuePrice - venueCost) / venueCost) * 100);
+
+      items.push({
+        service_id: 1,
+        service_name: data.venueName ? `Venue Liaison: ${data.venueName}` : 'Prime Banquet Hall & Lawn Booking',
+        category: 'Venue & Hospitality',
+        vendor_id: null,
+        vendor_name: preferredVenue ? preferredVenue.name : 'Mezban Verified Venue Partner',
+        vendor_cost: venueCost,
+        margin_pct: venueMargin > 0 ? venueMargin : 15,
+        customer_price: venuePrice,
+        details: `AC hall, separate gents/ladies partition, generator backup in ${data.venueArea || 'Beed'}`
+      });
+    }
+
+    // 3. Decoration Requirement
+    if (data.decorationRequired !== 'No') {
+      const decorVendor = db.prepare(`
+        SELECT v.vendor_id, v.business_name, vs.service_id, s.name as service_name, vs.base_price
+        FROM vendors v
+        JOIN vendor_services vs ON v.vendor_id = vs.vendor_id
+        JOIN services s ON vs.service_id = s.service_id
+        WHERE s.category_id = 3
+        LIMIT 1
+      `).get();
+
+      const decorType = data.decorationType || 'Standard';
+      let baseDecorCost = 25000;
+      if (['Premium', 'Luxury', 'Royal'].includes(decorType)) baseDecorCost = 45000;
+      else if (['Islamic Theme', 'Modern', 'Floral'].includes(decorType)) baseDecorCost = 35000;
+      else if (['Simple', 'Basic', 'Minimal'].includes(decorType)) baseDecorCost = 16000;
+
+      const areas = Array.isArray(data.decorationAreas) && data.decorationAreas.length > 0 
+        ? data.decorationAreas.slice(0, 4).join(', ') 
+        : 'Main Stage, Entrance Gate, Floral Backdrop';
+
+      const decorMargin = 22;
+      items.push({
+        service_id: decorVendor?.service_id || 4,
+        service_name: `Theme Decoration (${decorType})`,
+        category: 'Decoration & Theme Setup',
+        vendor_id: decorVendor?.vendor_id || 2,
+        vendor_name: decorVendor?.business_name || 'Noor Mandap & Floral Elegance',
+        vendor_cost: baseDecorCost,
+        margin_pct: decorMargin,
+        customer_price: Math.round(baseDecorCost * (1 + decorMargin / 100)),
+        details: `${decorType} styling: ${areas}. Colors: ${data.preferredColors || 'Royal Gold & White'}`
+      });
+    }
+
+    // 4. Photography & Videography
+    const photoServices = Array.isArray(data.photoServices) ? data.photoServices : [];
+    if (photoServices.length > 0 || data.photographyRequired) {
+      const photoVendor = db.prepare(`
+        SELECT v.vendor_id, v.business_name, vs.service_id, s.name as service_name, vs.base_price
+        FROM vendors v
+        JOIN vendor_services vs ON v.vendor_id = vs.vendor_id
+        JOIN services s ON vs.service_id = s.service_id
+        WHERE s.category_id = 4
+        LIMIT 1
+      `).get();
+
+      let photoCost = parseFloat(data.approxPhotoBudget) ? Math.round(parseFloat(data.approxPhotoBudget) * 0.80) : 38000;
+      if (photoServices.includes('Cinematic Video') || photoServices.includes('Drone')) {
+        photoCost = Math.max(photoCost, 45000);
+      }
+      const photoMargin = 20;
+      const photoPrice = Math.round(photoCost * (1 + photoMargin / 100));
+
+      items.push({
+        service_id: photoVendor?.service_id || 6,
+        service_name: 'Cinematic Photography, 4K Video & Drone',
+        category: 'Photography & Cinematic Media',
+        vendor_id: photoVendor?.vendor_id || 3,
+        vendor_name: photoVendor?.business_name || 'Al-Falah Cinematic Studio',
+        vendor_cost: photoCost,
+        margin_pct: photoMargin,
+        customer_price: photoPrice,
+        details: photoServices.join(', ') || 'Traditional + Candid photography, 4K cinematic film & photo album'
+      });
+    }
+
+    // 5. Sound, DJ, Lights & Entertainment
+    const soundItems = Array.isArray(data.soundEntertainment) ? data.soundEntertainment : [];
+    if (soundItems.length > 0) {
+      const soundVendor = db.prepare(`
+        SELECT v.vendor_id, v.business_name, vs.service_id, s.name as service_name, vs.base_price
+        FROM vendors v
+        JOIN vendor_services vs ON v.vendor_id = vs.vendor_id
+        JOIN services s ON vs.service_id = s.service_id
+        WHERE s.category_id = 5
+        LIMIT 1
+      `).get();
+
+      const soundCost = soundItems.includes('LED Wall') ? 22000 : 14000;
+      const soundMargin = 25;
+      items.push({
+        service_id: soundVendor?.service_id || 7,
+        service_name: 'Pro Sound, Stage Lighting & Audio Setup',
+        category: 'Sound, Lights & Entertainment',
+        vendor_id: soundVendor?.vendor_id || 5,
+        vendor_name: soundVendor?.business_name || 'Star Pro Light & Sound Systems',
+        vendor_cost: soundCost,
+        margin_pct: soundMargin,
+        customer_price: Math.round(soundCost * (1 + soundMargin / 100)),
+        details: soundItems.join(', ') || 'Line array sound, wireless handheld mics & ambient focus lights'
+      });
+    }
+
+    // 6. Stage, Seating & Shamiana
+    const seatingItems = Array.isArray(data.stageSeating) ? data.stageSeating : [];
+    if (seatingItems.length > 0) {
+      const tentVendor = db.prepare(`
+        SELECT v.vendor_id, v.business_name, vs.service_id, s.name as service_name, vs.base_price
+        FROM vendors v
+        JOIN vendor_services vs ON v.vendor_id = vs.vendor_id
+        JOIN services s ON vs.service_id = s.service_id
+        WHERE s.category_id = 6
+        LIMIT 1
+      `).get();
+
+      const tentCost = 20000;
+      const tentMargin = 20;
+      items.push({
+        service_id: tentVendor?.service_id || 8,
+        service_name: 'VIP Seating, Sofas, Shamiana & Carpet Setup',
+        category: 'Stage, Shamiana & Seating',
+        vendor_id: tentVendor?.vendor_id || 4,
+        vendor_name: tentVendor?.business_name || 'Marathwada Tent & Sound Hub',
+        vendor_cost: tentCost,
+        margin_pct: tentMargin,
+        customer_price: Math.round(tentCost * (1 + tentMargin / 100)),
+        details: seatingItems.join(', ') || 'VIP Sofas, royal banquet chairs, tables, and partition shamiana'
+      });
+    }
+
+    // 7. Invitations & Digital Media
+    const invitationItems = Array.isArray(data.invitationPrinting) ? data.invitationPrinting : [];
+    if (invitationItems.length > 0) {
+      const printVendor = db.prepare(`
+        SELECT v.vendor_id, v.business_name, vs.service_id, s.name as service_name, vs.base_price
+        FROM vendors v
+        JOIN vendor_services vs ON v.vendor_id = vs.vendor_id
+        JOIN services s ON vs.service_id = s.service_id
+        WHERE s.category_id = 7
+        LIMIT 1
+      `).get();
+
+      const printCost = 3500;
+      const printMargin = 25;
+      items.push({
+        service_id: printVendor?.service_id || 9,
+        service_name: 'Designer Invitation Cards & Digital E-Invite',
+        category: 'Invitations & Digital Media',
+        vendor_id: printVendor?.vendor_id || 6,
+        vendor_name: printVendor?.business_name || 'Classic Offset & Digital Press',
+        vendor_cost: printCost,
+        margin_pct: printMargin,
+        customer_price: Math.round(printCost * (1 + printMargin / 100)),
+        details: invitationItems.join(', ') || 'Custom Urdu/English print invites and WhatsApp video card'
+      });
+    }
+
+    // 8. Bridal & Personal Services
+    const bridalItems = Array.isArray(data.bridalServices) ? data.bridalServices : [];
+    if (bridalItems.length > 0) {
+      const bridalVendor = db.prepare(`
+        SELECT v.vendor_id, v.business_name, vs.service_id, s.name as service_name, vs.base_price
+        FROM vendors v
+        JOIN vendor_services vs ON v.vendor_id = vs.vendor_id
+        JOIN services s ON vs.service_id = s.service_id
+        WHERE s.category_id = 8
+        LIMIT 1
+      `).get();
+
+      const bridalCost = 18000;
+      const bridalMargin = 20;
+      items.push({
+        service_id: bridalVendor?.service_id || 10,
+        service_name: 'Bridal Makeover, Hair & Mehendi Artistry',
+        category: 'Bridal Styling & Cake',
+        vendor_id: bridalVendor?.vendor_id || 7,
+        vendor_name: bridalVendor?.business_name || 'Zoya Bridal Glamour & Mehendi',
+        vendor_cost: bridalCost,
+        margin_pct: bridalMargin,
+        customer_price: Math.round(bridalCost * (1 + bridalMargin / 100)),
+        details: bridalItems.join(', ') || 'HD bridal makeup, hair styling, intricate bridal mehendi'
+      });
+    }
+
+    // 9. Guest Hospitality & Management
+    const hospitalityItems = Array.isArray(data.guestHospitality) ? data.guestHospitality : [];
+    if (hospitalityItems.length > 0) {
+      items.push({
+        service_id: 1,
+        service_name: 'Event Hospitality & Guest Welcome Desk',
+        category: 'Venue & Hospitality',
+        vendor_id: null,
+        vendor_name: 'Mezban In-House Hospitality Staff',
+        vendor_cost: 8000,
+        margin_pct: 25,
+        customer_price: 10000,
+        details: hospitalityItems.join(', ') || 'Welcome desk, gent/ladies usher coordination & assistance'
+      });
+    }
+
+    // 10. Mezban Complete Coordination & Quality Assurance Fee
+    const mezbanCoordCost = 12000;
+    const mezbanCoordPrice = 25000;
+    items.push({
+      service_id: 1,
+      service_name: 'Mezban On-Ground Event Management & Supervision',
+      category: 'Venue & Hospitality',
+      vendor_id: null,
+      vendor_name: 'Mezban Operations Team (Beed)',
+      vendor_cost: mezbanCoordCost,
+      margin_pct: Math.round(((mezbanCoordPrice - mezbanCoordCost) / mezbanCoordCost) * 100),
+      customer_price: mezbanCoordPrice,
+      details: 'Full day supervisor, vendor liaison, timeline enforcement & stress-free delivery'
+    });
+
+    // Summary calculations
+    let totalCost = 0;
+    let totalPrice = 0;
+    items.forEach(it => {
+      totalCost += parseFloat(it.vendor_cost || 0);
+      totalPrice += parseFloat(it.customer_price || 0);
+    });
+
+    const mezbaanMargin = totalPrice - totalCost;
+    const advanceRequired = Math.round(totalPrice * 0.30); // 30% advance standard
+
+    res.json({
+      success: true,
+      items,
+      summary: {
+        totalCost,
+        totalPrice,
+        mezbaanMargin,
+        advanceRequired,
+        marginPct: Math.round((mezbaanMargin / totalPrice) * 100)
+      }
+    });
+  } catch (err) {
+    console.error('Error calculating quote:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Save or submit requirement sheet
+app.post('/api/requirement-sheets', (req, res) => {
+  try {
+    const { formData, quoteItems, quoteSummary } = req.body;
+    if (!formData) {
+      return res.status(400).json({ success: false, message: 'Form data is required' });
+    }
+
+    const customerName = formData.customerName || formData.contactPerson || 'Customer Lead';
+    const mobile = formData.mobile || formData.whatsapp || '9999999999';
+    const email = formData.email || `${mobile}@mezban.in`;
+    const eventType = formData.eventType || 'Event';
+    const eventDate = formData.eventDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    const guestCount = parseInt(formData.approxGuestCount || formData.guestCount || 300, 10);
+    const leadStatus = formData.leadStatus || 'Level 1 – Potential';
+
+    // 1. Ensure customer exists or create
+    let customer = db.prepare('SELECT customer_id FROM customers WHERE phone = ?').get(mobile);
+    let customerId;
+    if (customer) {
+      customerId = customer.customer_id;
+      db.prepare('UPDATE customers SET name = ?, email = ? WHERE customer_id = ?').run(customerName, email, customerId);
+    } else {
+      const cInfo = db.prepare(`
+        INSERT INTO customers (name, phone, email, address, status)
+        VALUES (?, ?, ?, ?, 'Active')
+      `).run(customerName, mobile, email, formData.venueArea || 'Beed');
+      customerId = cInfo.lastInsertRowid;
+    }
+
+    // 2. Ensure event exists or create
+    const budget = quoteSummary?.totalPrice || parseFloat(formData.approxBudget) || 200000;
+    const eInfo = db.prepare(`
+      INSERT INTO events (customer_id, event_type, event_date, location, guest_count, budget, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'Quotation Sent')
+    `).run(customerId, eventType, eventDate, formData.venueArea || 'Beed', guestCount, budget);
+    const eventId = eInfo.lastInsertRowid;
+
+    // 3. Create Quote and Quote Items if quoteItems provided
+    let quoteId = null;
+    if (Array.isArray(quoteItems) && quoteItems.length > 0) {
+      let totalCost = 0;
+      let totalPrice = 0;
+      quoteItems.forEach(it => {
+        totalCost += parseFloat(it.vendor_cost || 0);
+        totalPrice += parseFloat(it.customer_price || 0);
+      });
+      const mezbaanMargin = totalPrice - totalCost;
+
+      const qInfo = db.prepare(`
+        INSERT INTO quotes (event_id, total_cost, mezbaan_margin, total_price, status, valid_until)
+        VALUES (?, ?, ?, ?, 'Draft', ?)
+      `).run(
+        eventId,
+        totalCost,
+        mezbaanMargin,
+        totalPrice,
+        new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+      );
+      quoteId = qInfo.lastInsertRowid;
+
+      const itemStmt = db.prepare(`
+        INSERT INTO quote_items (quote_id, vendor_id, service_id, vendor_cost, customer_price)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      for (const it of quoteItems) {
+        itemStmt.run(quoteId, it.vendor_id || null, it.service_id || null, it.vendor_cost, it.customer_price);
+      }
+    }
+
+    // 4. Save to requirement_sheets table
+    const sheetInfo = db.prepare(`
+      INSERT INTO requirement_sheets (
+        event_id, customer_id, customer_name, contact_person, mobile, whatsapp, email,
+        event_type, event_date, guest_count, form_data, lead_status, quotation_id
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      eventId,
+      customerId,
+      customerName,
+      formData.contactPerson || customerName,
+      mobile,
+      formData.whatsapp || mobile,
+      email,
+      eventType,
+      eventDate,
+      guestCount,
+      JSON.stringify(formData),
+      leadStatus,
+      quoteId
+    );
+
+    res.json({
+      success: true,
+      sheet_id: sheetInfo.lastInsertRowid,
+      event_id: eventId,
+      customer_id: customerId,
+      quote_id: quoteId,
+      message: 'Customer requirement and quotation registered successfully'
+    });
+  } catch (err) {
+    console.error('Error saving requirement sheet:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// List all requirement sheets
+app.get('/api/requirement-sheets', (req, res) => {
+  try {
+    const sheets = db.prepare(`
+      SELECT rs.*, q.total_price, q.total_cost, q.mezbaan_margin, q.status as quote_status
+      FROM requirement_sheets rs
+      LEFT JOIN quotes q ON rs.quotation_id = q.quote_id
+      ORDER BY rs.sheet_id DESC
+    `).all();
+
+    res.json({ success: true, sheets });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Single requirement sheet details
+app.get('/api/requirement-sheets/:id', (req, res) => {
+  try {
+    const sheet = db.prepare('SELECT * FROM requirement_sheets WHERE sheet_id = ?').get(req.params.id);
+    if (!sheet) {
+      return res.status(404).json({ success: false, message: 'Requirement sheet not found' });
+    }
+
+    let quote = null;
+    let quoteItems = [];
+    if (sheet.quotation_id) {
+      quote = db.prepare('SELECT * FROM quotes WHERE quote_id = ?').get(sheet.quotation_id);
+      quoteItems = db.prepare(`
+        SELECT qi.*, s.name as service_name, v.business_name as vendor_name
+        FROM quote_items qi
+        LEFT JOIN services s ON qi.service_id = s.service_id
+        LEFT JOIN vendors v ON qi.vendor_id = v.vendor_id
+        WHERE qi.quote_id = ?
+      `).all(sheet.quotation_id);
+    }
+
+    res.json({
+      success: true,
+      sheet: {
+        ...sheet,
+        form_data: typeof sheet.form_data === 'string' ? JSON.parse(sheet.form_data) : sheet.form_data
+      },
+      quote,
+      quoteItems
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Send quotation via WhatsApp / Email / SMS
+app.post('/api/quotations/send', (req, res) => {
+  try {
+    const { quote_id, sheet_id, customer_name, mobile, email, event_type, event_date, guest_count, items, total_price, advance_required } = req.body;
+
+    // Update quote status in DB if exists
+    if (quote_id) {
+      db.prepare("UPDATE quotes SET status = 'Sent' WHERE quote_id = ?").run(quote_id);
+    }
+
+    // Format WhatsApp & SMS plain text message
+    let itemsText = '';
+    if (Array.isArray(items)) {
+      itemsText = items.map((it, idx) => `${idx + 1}. ${it.service_name}: ₹${Number(it.customer_price).toLocaleString('en-IN')}`).join('\n');
+    }
+
+    const cleanMobile = (mobile || '').replace(/\D/g, '');
+    const mobileWithCountry = cleanMobile.startsWith('91') ? cleanMobile : `91${cleanMobile}`;
+
+    const whatsappMessage = 
+`👑 *MEZBAAN EVENTS & CELEBRATIONS*
+*Official Quotation & Event Estimate*
+----------------------------------------
+*Client:* ${customer_name || 'Valued Client'}
+*Event:* ${event_type || 'Event'}
+*Date:* ${event_date || 'Upcoming'}
+*Guests:* ${guest_count || 300}
+----------------------------------------
+*ESTIMATED SERVICES:*
+${itemsText}
+----------------------------------------
+*TOTAL ESTIMATED QUOTE:* ₹${Number(total_price || 0).toLocaleString('en-IN')}
+*Advance Required (30%):* ₹${Number(advance_required || Math.round((total_price || 0) * 0.3)).toLocaleString('en-IN')}
+
+✓ Transparent Pricing • Zero Hidden Charges
+✓ 100% Verified Quality Vendors & Supervised Execution
+----------------------------------------
+To confirm this booking, reply to this message or call Mezban Support: +91 98220 14589`;
+
+    const whatsappUrl = `https://wa.me/${mobileWithCountry}?text=${encodeURIComponent(whatsappMessage)}`;
+    const emailSubject = `MEZBAAN Event Quotation - ${event_type} for ${customer_name}`;
+    const emailMailto = `mailto:${email || ''}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(whatsappMessage)}`;
+
+    res.json({
+      success: true,
+      message: `Quotation prepared for ${customer_name}. Ready to dispatch to Mobile: ${mobile} & Email: ${email}`,
+      dispatches: {
+        whatsapp_url: whatsappUrl,
+        email_mailto: emailMailto,
+        whatsapp_message: whatsappMessage,
+        recipient_mobile: mobile,
+        recipient_email: email,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('Error sending quotation:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 13. DATABASE EXPLORER & ER DIAGRAM INSPECTOR
 // -------------------------------------------------------------
 app.get('/api/database/overview', (req, res) => {
   try {
@@ -757,6 +1280,7 @@ app.get('/api/database/overview', (req, res) => {
       'services',
       'events',
       'event_requirements',
+      'requirement_sheets',
       'vendors',
       'vendor_services',
       'quotes',

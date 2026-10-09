@@ -165,6 +165,29 @@ function initDatabase() {
       FOREIGN KEY (vendor_id) REFERENCES vendors(vendor_id) ON DELETE SET NULL,
       FOREIGN KEY (booking_id) REFERENCES bookings(booking_id) ON DELETE SET NULL
     );
+
+    -- 14. Customer Requirement Sheets Table (Admin Intake)
+    CREATE TABLE IF NOT EXISTS requirement_sheets (
+      sheet_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER,
+      customer_id INTEGER,
+      customer_name TEXT NOT NULL,
+      contact_person TEXT,
+      mobile TEXT NOT NULL,
+      whatsapp TEXT,
+      email TEXT,
+      event_type TEXT,
+      event_date DATE,
+      guest_count INTEGER,
+      form_data TEXT, -- Full JSON payload of all sections A to Q and internal notes
+      lead_status TEXT DEFAULT 'Level 1 – Potential',
+      quotation_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE SET NULL,
+      FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE SET NULL,
+      FOREIGN KEY (quotation_id) REFERENCES quotes(quote_id) ON DELETE SET NULL
+    );
   `);
 
   seedInitialData();

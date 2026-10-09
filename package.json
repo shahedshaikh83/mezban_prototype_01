@@ -1,0 +1,12 @@
+{
+  "name": "mezban-app",
+  "version": "1.0.0",
+  "description": "MEZBAAN Events & Celebrations Platform",
+  "scripts": {
+    "start": "node backend/server.js",
+    "server": "node backend/server.js",
+    "backend": "node backend/server.js",
+    "frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build"
+  }
+}

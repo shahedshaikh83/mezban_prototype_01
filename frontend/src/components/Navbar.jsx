@@ -1,7 +1,7 @@
 import React from 'react';
-import { Crown, Sparkles, User, Briefcase, Shield, Database, Calendar } from 'lucide-react';
+import { Crown, Sparkles, User, Briefcase, Shield, Database, Calendar, FileText } from 'lucide-react';
 
-export default function Navbar({ activePortal, setActivePortal, openPlanModal }) {
+export default function Navbar({ activePortal, setActivePortal, openPlanModal, openRequirementSheet }) {
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 100 }}>
       {/* Top Portal Switcher Bar */}
@@ -96,7 +96,26 @@ export default function Navbar({ activePortal, setActivePortal, openPlanModal })
           </div>
 
           {/* Quick CTA */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={openRequirementSheet}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 16px',
+                borderRadius: 20,
+                background: '#0f3d2e',
+                color: '#ffffff',
+                border: '1.5px solid #d4af37',
+                fontSize: '0.84rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(15, 61, 46, 0.2)'
+              }}
+            >
+              <FileText size={15} color="#d4af37" /> 📝 Customer Requirement (Admin)
+            </button>
             <button
               onClick={() => setActivePortal('database')}
               className="btn-outline"

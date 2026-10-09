@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, DollarSign, Calendar, Users, Briefcase, MapPin, 
   Plus, CheckCircle, Clock, ChevronRight, FileText, Check, 
-  ArrowUpRight, AlertCircle, RefreshCw, Layers 
+  ArrowUpRight, AlertCircle, RefreshCw, Layers, MessageSquare, Phone
 } from 'lucide-react';
+import CustomerRequirementSheet from '../components/CustomerRequirementSheet';
 
 export default function AdminPortal() {
   const [stats, setStats] = useState(null);
@@ -11,9 +12,14 @@ export default function AdminPortal() {
   const [vendors, setVendors] = useState([]);
   const [venues, setVenues] = useState([]);
   const [services, setServices] = useState([]);
-  const [activeTab, setActiveTab] = useState('pipeline'); // 'pipeline', 'quotes', 'vendors', 'venues', 'finance'
+  const [activeTab, setActiveTab] = useState('pipeline'); // 'pipeline', 'requirements', 'quotes', 'vendors', 'venues', 'finance'
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [eventDetails, setEventDetails] = useState(null);
+
+  // Customer Requirement Intake Modal & State
+  const [showRequirementModal, setShowRequirementModal] = useState(false);
+  const [activeSheetId, setActiveSheetId] = useState(null);
+  const [requirementSheets, setRequirementSheets] = useState([]);
 
   // New Quote Builder State
   const [quoteEventId, setQuoteEventId] = useState('');
@@ -70,6 +76,11 @@ export default function AdminPortal() {
     fetch('/api/services')
       .then(r => r.json())
       .then(d => { if (d.success) setServices(d.services); })
+      .catch(console.error);
+
+    fetch('/api/requirement-sheets')
+      .then(r => r.json())
+      .then(d => { if (d.success) setRequirementSheets(d.sheets); })
       .catch(console.error);
   };
 
@@ -209,31 +220,55 @@ export default function AdminPortal() {
           </p>
         </div>
 
-        {/* Action Tabs */}
-        <div style={{ display: 'flex', gap: 8, background: '#f3efe6', padding: 6, borderRadius: 30, border: '1px solid #e2d7c0' }}>
-          {[
-            { id: 'pipeline', label: 'Events Pipeline' },
-            { id: 'quotes', label: 'Quote & Margin Builder' },
-            { id: 'vendors', label: 'Vendor Network' },
-            { id: 'venues', label: 'Venues Directory' },
-            { id: 'finance', label: 'P&L Ledger' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                padding: '6px 16px',
-                borderRadius: 20,
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                background: activeTab === tab.id ? '#0f3d2e' : 'transparent',
-                color: activeTab === tab.id ? '#ffffff' : '#4b5563',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Action Tabs & Primary Requirement Intake CTA */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => { setActiveSheetId(null); setShowRequirementModal(true); }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'linear-gradient(135deg, #0f3d2e 0%, #175440 100%)',
+              color: '#ffffff',
+              border: '2px solid #d4af37',
+              padding: '8px 18px',
+              borderRadius: 24,
+              fontSize: '0.84rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(15, 61, 46, 0.25)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <FileText size={16} color="#d4af37" /> 📝 Take Customer Requirement
+          </button>
+
+          <div style={{ display: 'flex', gap: 6, background: '#f3efe6', padding: 5, borderRadius: 30, border: '1px solid #e2d7c0' }}>
+            {[
+              { id: 'pipeline', label: 'Events Pipeline' },
+              { id: 'requirements', label: 'Requirement Sheets' },
+              { id: 'quotes', label: 'Quote & Margin Builder' },
+              { id: 'vendors', label: 'Vendor Network' },
+              { id: 'venues', label: 'Venues Directory' },
+              { id: 'finance', label: 'P&L Ledger' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '6px 15px',
+                  borderRadius: 20,
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  background: activeTab === tab.id ? '#0f3d2e' : 'transparent',
+                  color: activeTab === tab.id ? '#ffffff' : '#4b5563',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -464,6 +499,182 @@ export default function AdminPortal() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: REQUIREMENT SHEETS (ADMIN INTAKE & QUOTING) */}
+      {activeTab === 'requirements' && (
+        <div className="card-luxury">
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 24,
+            flexWrap: 'wrap',
+            gap: 16
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="badge badge-gold">OFFICIAL 9-SECTION DOCUMENT ENGINE</span>
+                <h2 style={{ fontSize: '1.45rem', color: '#0f3d2e', margin: 0, fontWeight: 800 }}>
+                  Customer Event Requirement Sheets
+                </h2>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: '#666', marginTop: 4 }}>
+                Admin requirement gathering • Automatic vendor pricing lookup • Live editable quotation & WhatsApp dispatch
+              </p>
+            </div>
+
+            <button
+              onClick={() => { setActiveSheetId(null); setShowRequirementModal(true); }}
+              className="btn-gold"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 22px',
+                borderRadius: 24,
+                fontSize: '0.9rem',
+                fontWeight: 800
+              }}
+            >
+              <Plus size={18} /> Take New Customer Requirement
+            </button>
+          </div>
+
+          {/* Table of submitted requirement sheets */}
+          {requirementSheets.length === 0 ? (
+            <div style={{
+              background: '#fcfaf6',
+              border: '2px dashed #dcd3c4',
+              borderRadius: 12,
+              padding: '48px 24px',
+              textAlign: 'center'
+            }}>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: '#f3efe6',
+                color: '#0f3d2e',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}>
+                <FileText size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.2rem', color: '#0f3d2e', marginBottom: 6 }}>
+                No Customer Requirement Sheets Logged Yet
+              </h3>
+              <p style={{ fontSize: '0.88rem', color: '#6b7280', maxWidth: 480, margin: '0 auto 20px' }}>
+                Capture comprehensive event requirements using the official discussion form (sections A through Q), then automatically generate and send itemized quotations.
+              </p>
+              <button
+                onClick={() => { setActiveSheetId(null); setShowRequirementModal(true); }}
+                className="btn-gold"
+                style={{ padding: '10px 24px' }}
+              >
+                Open Requirement Form
+              </button>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', border: '1px solid #ebdcc0', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                <thead>
+                  <tr style={{ background: '#f3efe6', color: '#1f2937', textAlign: 'left', borderBottom: '1.5px solid #d1d5db' }}>
+                    <th style={{ padding: '12px 14px' }}>Ref #</th>
+                    <th style={{ padding: '12px 14px' }}>Customer / Family</th>
+                    <th style={{ padding: '12px 14px' }}>Contact</th>
+                    <th style={{ padding: '12px 14px' }}>Event & Date</th>
+                    <th style={{ padding: '12px 14px' }}>Guests</th>
+                    <th style={{ padding: '12px 14px' }}>Lead Status</th>
+                    <th style={{ padding: '12px 14px' }}>Quote Price (₹)</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requirementSheets.map(sheet => (
+                    <tr key={sheet.sheet_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 800, color: '#0f3d2e' }}>
+                        MEZ-REQ-{String(sheet.sheet_id).padStart(4, '0')}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <strong style={{ color: '#111827' }}>{sheet.customer_name}</strong>
+                        {sheet.contact_person && sheet.contact_person !== sheet.customer_name && (
+                          <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>Attn: {sheet.contact_person}</div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', color: '#4b5563' }}>
+                        <div>📞 {sheet.mobile}</div>
+                        {sheet.whatsapp && sheet.whatsapp !== sheet.mobile && (
+                          <div style={{ fontSize: '0.78rem', color: '#059669' }}>WA: {sheet.whatsapp}</div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 600, color: '#0f3d2e' }}>{sheet.event_type}</div>
+                        <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>📅 {sheet.event_date}</div>
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: 700, color: '#111827' }}>
+                        {sheet.guest_count}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <span className="badge badge-green" style={{ fontSize: '0.75rem' }}>
+                          {sheet.lead_status || 'Potential'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: 800, color: '#0f3d2e', fontSize: '0.95rem' }}>
+                        {sheet.total_price ? `₹${Number(sheet.total_price).toLocaleString('en-IN')}` : 'Calculating'}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                          <button
+                            onClick={() => {
+                              setActiveSheetId(sheet.sheet_id);
+                              setShowRequirementModal(true);
+                            }}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: 4,
+                              background: '#0f3d2e',
+                              color: '#ffffff',
+                              border: 'none',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            View & Edit Quote
+                          </button>
+                          {sheet.whatsapp && (
+                            <a
+                              href={`https://wa.me/91${sheet.whatsapp.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                padding: '5px 10px',
+                                borderRadius: 4,
+                                background: '#25D366',
+                                color: '#ffffff',
+                                textDecoration: 'none',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                            >
+                              <MessageSquare size={13} /> WA
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -874,6 +1085,32 @@ export default function AdminPortal() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Customer Requirement Intake Sheet Modal / Full View */}
+      {showRequirementModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: '#fbf9f5',
+          zIndex: 9999,
+          overflowY: 'auto'
+        }}>
+          <CustomerRequirementSheet
+            initialSheetId={activeSheetId}
+            onClose={() => {
+              setShowRequirementModal(false);
+              setActiveSheetId(null);
+              loadAllData();
+            }}
+            onSaved={() => {
+              loadAllData();
+            }}
+          />
         </div>
       )}
     </div>
