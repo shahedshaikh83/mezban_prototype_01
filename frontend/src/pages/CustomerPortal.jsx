@@ -160,7 +160,7 @@ export default function CustomerPortal({ openPlanModal }) {
         </div>
 
         {/* Switch Customer Profile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#4b5563' }}>
             Switch Customer:
           </label>
@@ -197,7 +197,7 @@ export default function CustomerPortal({ openPlanModal }) {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 28 }}>
+        <div className="sidebar-layout">
           {/* Left Column: Events List */}
           <div>
             <h3 style={{ fontSize: '1.1rem', color: '#0f3d2e', marginBottom: 14 }}>
@@ -303,7 +303,7 @@ export default function CustomerPortal({ openPlanModal }) {
 
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
                   gap: 16,
                   background: '#fcfaf5',
                   padding: 16,
@@ -495,7 +495,7 @@ export default function CustomerPortal({ openPlanModal }) {
                     <div>
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))',
                         gap: 14,
                         marginBottom: 20
                       }}>
@@ -566,7 +566,7 @@ export default function CustomerPortal({ openPlanModal }) {
                               Payment successfully recorded in MEZBAAN ledger!
                             </div>
                           )}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'flex-end' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, alignItems: 'flex-end' }}>
                             <div className="form-group" style={{ marginBottom: 0 }}>
                               <label className="form-label">Payment Amount (₹)</label>
                               <input

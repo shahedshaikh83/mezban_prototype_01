@@ -1260,7 +1260,7 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
               {/* Client & Event Summary Grid */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
                 gap: 16,
                 background: '#fcfaf6',
                 border: '1px solid #ebdcc5',
@@ -1320,7 +1320,7 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
               {/* Financial KPI Banner */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
                 gap: 16,
                 marginBottom: 28
               }}>
@@ -1842,7 +1842,7 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
               </div>
 
               {/* Vendor Cost, Margin %, Client Price */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))', gap: 10, marginBottom: 14 }}>
                 <div>
                   <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
                     Vendor Cost (₹):

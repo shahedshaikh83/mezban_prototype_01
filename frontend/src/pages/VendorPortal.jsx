@@ -166,7 +166,7 @@ export default function VendorPortal() {
       </div>
 
       {selectedVendor && (
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 28 }}>
+        <div className="sidebar-layout">
           {/* Left Column: Vendor Profile & Catalog */}
           <div>
             <div className="card-luxury" style={{ marginBottom: 24 }}>
@@ -310,7 +310,7 @@ export default function VendorPortal() {
 
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
                 gap: 16,
                 background: '#fcfaf5',
                 padding: 16,
@@ -359,7 +359,7 @@ export default function VendorPortal() {
               </div>
             ) : (
               <form onSubmit={handleRegisterSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14 }}>
                   <div className="form-group">
                     <label className="form-label">Business Name *</label>
                     <input

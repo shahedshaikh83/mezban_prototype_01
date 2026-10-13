@@ -165,7 +165,7 @@ export default function PlanEventModal({ isOpen, onClose, onEventCreated }) {
               <h4 style={{ fontSize: '0.9rem', color: '#b38f20', textTransform: 'uppercase', marginBottom: 12, letterSpacing: '0.05em' }}>
                 1. Customer Information
               </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Full Name *</label>
                   <input
@@ -216,7 +216,7 @@ export default function PlanEventModal({ isOpen, onClose, onEventCreated }) {
               <h4 style={{ fontSize: '0.9rem', color: '#b38f20', textTransform: 'uppercase', marginBottom: 12, letterSpacing: '0.05em' }}>
                 2. Event Specifics
               </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Event Category *</label>
                   <select
@@ -307,7 +307,7 @@ export default function PlanEventModal({ isOpen, onClose, onEventCreated }) {
               <h4 style={{ fontSize: '0.9rem', color: '#b38f20', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.05em' }}>
                 3. Services Required (Select all that apply)
               </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginTop: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10, marginTop: 10 }}>
                 {services.map(s => {
                   const isChecked = formData.selected_services.includes(s.service_id);
                   return (

@@ -13,7 +13,7 @@ export default function Footer({ setActivePortal, openPlanModal }) {
       <div className="container">
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
           gap: 40,
           marginBottom: 50
         }}>

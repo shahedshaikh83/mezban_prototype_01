@@ -92,7 +92,7 @@ export default function StepFormRenderer({
         title="A. Customer Information"
         subtitle="Basic contact coordinates and relationship to the upcoming event."
       >
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px' }}>
           <TextField
             id="field-customer-name"
             label="Customer / Family Name"
@@ -173,7 +173,7 @@ export default function StepFormRenderer({
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px', marginTop: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px', marginTop: 10 }}>
           <SelectField
             label="Relationship to Event"
             options={RELATIONSHIP_OPTIONS}
@@ -237,7 +237,7 @@ export default function StepFormRenderer({
           error={errors.eventTypes}
         />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '14px 20px' }}>
           <div>
             <DateField
               id="field-event-date"
@@ -263,7 +263,7 @@ export default function StepFormRenderer({
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px 20px', marginTop: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '14px 20px', marginTop: 10 }}>
           <TimeField
             label="Start Time"
             value={formData.timingStart}
@@ -283,7 +283,7 @@ export default function StepFormRenderer({
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px 20px', marginTop: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '14px 20px', marginTop: 10 }}>
           <SelectField
             label="Expected Guests (Range)"
             options={GUEST_RANGES}
@@ -339,7 +339,7 @@ export default function StepFormRenderer({
         />
 
         {isVenueSelectedOrShortlisted && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px' }}>
             <TextField
               label="Venue Name"
               value={formData.venueName}
@@ -375,7 +375,7 @@ export default function StepFormRenderer({
           onOtherChange={v => handleInputChange('importantVenueOther', v)}
         />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px', marginTop: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px', marginTop: 10 }}>
           <TextField
             label="Preferred Area / Locality"
             value={formData.preferredArea}
@@ -414,7 +414,7 @@ export default function StepFormRenderer({
 
         {isDecorYes ? (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px' }}>
               <SelectField
                 label="Decoration Style / Type"
                 options={DECORATION_TYPE_OPTIONS}
@@ -515,7 +515,7 @@ export default function StepFormRenderer({
               onChange={v => handleInputChange('foodPreference', v)}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px' }}>
               <MultiSelectDropdown
                 label="Meal Slots"
                 options={MEAL_OPTIONS}
@@ -597,7 +597,7 @@ export default function StepFormRenderer({
               placeholder="Select media packages..."
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px 20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '14px 20px' }}>
               <TextField
                 label="Expected Coverage Hours"
                 type="number"
@@ -785,7 +785,7 @@ export default function StepFormRenderer({
           <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f3d2e', display: 'block', marginBottom: 10 }}>
             Family-Side Primary Coordinator:
           </span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px 20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '14px 20px' }}>
             <TextField
               label="Coordinator Name"
               value={formData.familyCoordinatorName}
@@ -815,7 +815,7 @@ export default function StepFormRenderer({
         title="M. Budget Discussion"
         subtitle="Overall event financial target, flexibility parameters, and top priorities."
       >
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px' }}>
           <SelectField
             label="Approximate Overall Event Budget Range"
             options={BUDGET_RANGE_OPTIONS}
@@ -940,7 +940,7 @@ export default function StepFormRenderer({
           placeholder="Select quotation deliverables..."
         />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px 20px', marginTop: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px 20px', marginTop: 10 }}>
           <TextField
             label="Quotation Deadline"
             value={formData.quotationDeadline}
@@ -968,7 +968,7 @@ export default function StepFormRenderer({
         title="Q. Follow-Up"
         subtitle="Internal follow-up schedule, decision makers, and lead qualification status."
       >
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '14px 20px' }}>
           <DateField
             label="Next Follow-Up Date"
             value={formData.nextFollowUpDate}
@@ -1034,7 +1034,7 @@ export default function StepFormRenderer({
         {/* Live Calculation KPI Banner */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
           gap: 12,
           background: '#fcfaf6',
           border: '1.5px solid #d4af37',
@@ -1075,7 +1075,7 @@ export default function StepFormRenderer({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '14px 20px' }}>
           <MoneyField
             label="Vendor Cost Estimate"
             value={formData.vendorCostEstimate || computedVendorCost}
@@ -1107,7 +1107,7 @@ export default function StepFormRenderer({
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px 20px', marginTop: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '14px 20px', marginTop: 14 }}>
           <RadioGroup
             label="Quotation Sent?"
             options={YES_NO_OPTIONS}

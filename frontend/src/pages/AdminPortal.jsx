@@ -243,7 +243,7 @@ export default function AdminPortal() {
             <FileText size={16} color="#d4af37" /> 📝 Take Customer Requirement
           </button>
 
-          <div style={{ display: 'flex', gap: 6, background: '#f3efe6', padding: 5, borderRadius: 30, border: '1px solid #e2d7c0' }}>
+          <div className="scroll-tabs" style={{ background: '#f3efe6', padding: 5, borderRadius: 30, border: '1px solid #e2d7c0' }}>
             {[
               { id: 'pipeline', label: 'Events Pipeline' },
               { id: 'requirements', label: 'Requirement Sheets' },
@@ -260,6 +260,8 @@ export default function AdminPortal() {
                   borderRadius: 20,
                   fontSize: '0.82rem',
                   fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
                   background: activeTab === tab.id ? '#0f3d2e' : 'transparent',
                   color: activeTab === tab.id ? '#ffffff' : '#4b5563',
                   transition: 'all 0.15s ease'
@@ -274,12 +276,7 @@ export default function AdminPortal() {
 
       {/* 2. Executive BI KPI Cards */}
       {stats && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 16,
-          marginBottom: 32
-        }}>
+        <div className="stat-grid" style={{ marginBottom: 32 }}>
           <div className="card-luxury" style={{ padding: 18 }}>
             <span style={{ fontSize: '0.75rem', color: '#666', textTransform: 'uppercase', fontWeight: 700 }}>
               Customer Billed (Revenue)
@@ -334,7 +331,7 @@ export default function AdminPortal() {
 
       {/* TAB 1: PIPELINE */}
       {activeTab === 'pipeline' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 24 }}>
+        <div className="sidebar-layout">
           {/* Events List */}
           <div>
             <h3 style={{ fontSize: '1.15rem', color: '#0f3d2e', marginBottom: 14 }}>
@@ -485,7 +482,7 @@ export default function AdminPortal() {
                       </table>
                     </div>
 
-                    <div style={{ background: '#fdfbf7', padding: '12px 16px', borderTop: '1px solid #ebdcc0', display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                    <div style={{ background: '#fdfbf7', padding: '12px 16px', borderTop: '1px solid #ebdcc0', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, fontSize: '0.88rem' }}>
                       <div>
                         Vendor Total Cost: <strong style={{ color: '#991b1b' }}>₹{Number(q.total_cost).toLocaleString('en-IN')}</strong>
                       </div>
@@ -1028,7 +1025,7 @@ export default function AdminPortal() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
                 <div className="form-group">
                   <label className="form-label">City *</label>
                   <select

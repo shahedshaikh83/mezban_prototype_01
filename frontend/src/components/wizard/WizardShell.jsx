@@ -34,7 +34,7 @@ export default function WizardShell({
     <div style={{
       background: '#fbf9f5',
       minHeight: '100vh',
-      padding: '20px 12px 90px',
+      padding: '16px 8px 80px',
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
       <div ref={formTopRef} style={{ maxWidth: 960, margin: '0 auto' }}>
@@ -278,13 +278,7 @@ export default function WizardShell({
         {/* ============================================================== */}
         {/* MAIN STEP FORM CONTAINER */}
         {/* ============================================================== */}
-        <div style={{
-          background: '#ffffff',
-          border: '1.5px solid #dcd3c4',
-          borderRadius: 8,
-          padding: '28px 24px 32px',
-          boxShadow: '0 8px 30px rgba(0,0,0,0.06)'
-        }}>
+        <div className="wizard-card">
           {/* Smooth Step Transition Wrapper */}
           <div
             key={currentStep}
@@ -368,17 +362,22 @@ export default function WizardShell({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   gap: 10,
-                  padding: '14px 30px',
+                  padding: '12px 20px',
                   borderRadius: 30,
                   background: '#0f3d2e',
                   border: 'none',
                   color: '#ffffff',
                   fontWeight: 800,
-                  fontSize: '1rem',
+                  fontSize: 'clamp(0.82rem, 2.8vw, 1rem)',
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   boxShadow: '0 8px 24px rgba(15, 61, 46, 0.3)',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  maxWidth: '100%',
+                  textAlign: 'center',
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word'
                 }}
               >
                 {isSubmitting ? (
