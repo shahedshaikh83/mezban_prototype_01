@@ -5,6 +5,7 @@ import {
   ArrowUpRight, AlertCircle, RefreshCw, Layers, MessageSquare, Phone
 } from 'lucide-react';
 import CustomerRequirementSheet from '../components/CustomerRequirementSheet';
+import { apiFetch } from '../utils/api';
 
 export default function AdminPortal() {
   const [stats, setStats] = useState(null);
@@ -78,10 +79,23 @@ export default function AdminPortal() {
       .then(d => { if (d.success) setServices(d.services); })
       .catch(console.error);
 
-    fetch('/api/requirement-sheets')
-      .then(r => r.json())
-      .then(d => { if (d.success) setRequirementSheets(d.sheets); })
-      .catch(console.error);
+    apiFetch('/api/requirement-sheets', { asAdmin: true })
+      .then(res => {
+        if (res.ok && res.data?.success && Array.isArray(res.data.sheets)) {
+          setRequirementSheets(res.data.sheets);
+        } else {
+          try {
+            const drafts = JSON.parse(localStorage.getItem('mezban_draft_sheets') || '[]');
+            if (drafts.length > 0) setRequirementSheets(drafts);
+          } catch {}
+        }
+      })
+      .catch(() => {
+        try {
+          const drafts = JSON.parse(localStorage.getItem('mezban_draft_sheets') || '[]');
+          if (drafts.length > 0) setRequirementSheets(drafts);
+        } catch {}
+      });
   };
 
   const loadEventDetails = (id) => {
@@ -1099,6 +1113,7 @@ export default function AdminPortal() {
         }}>
           <CustomerRequirementSheet
             initialSheetId={activeSheetId}
+            isAdmin={true}
             onClose={() => {
               setShowRequirementModal(false);
               setActiveSheetId(null);

@@ -4,11 +4,16 @@ import {
   Layers, HardDrive, ShieldCheck, ArrowRight, Server 
 } from 'lucide-react';
 
-export default function DatabaseExplorer() {
+export default function DatabaseExplorer({ viewMode = 'all' }) {
   const [tablesOverview, setTablesOverview] = useState([]);
   const [selectedTable, setSelectedTable] = useState('events');
   const [tableData, setTableData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [activeView, setActiveView] = useState(viewMode);
+
+  useEffect(() => {
+    setActiveView(viewMode);
+  }, [viewMode]);
 
   useEffect(() => {
     fetchTablesOverview();
@@ -185,74 +190,211 @@ export default function DatabaseExplorer() {
         </div>
       </div>
 
-      {/* 1. ER Diagram Entity Cards Matrix */}
-      <div style={{ marginBottom: 36 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: '1.35rem', color: '#0f3d2e', margin: 0 }}>
-            ER Schema Entities (13 Tables)
-          </h2>
-          <span style={{ fontSize: '0.82rem', color: '#666' }}>
-            Click any table below to inspect live records in real time
-          </span>
+      {/* View Filter Switcher Tabs */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12,
+        marginBottom: 24,
+        background: '#f3efe6',
+        padding: '6px 12px',
+        borderRadius: 30,
+        border: '1px solid #e2d7c0'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setActiveView('database')}
+            style={{
+              padding: '7px 18px',
+              borderRadius: 20,
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: activeView === 'database' ? '#0f3d2e' : 'transparent',
+              color: activeView === 'database' ? '#ffffff' : '#374151',
+              border: activeView === 'database' ? '1px solid #0f3d2e' : '1px solid transparent',
+              cursor: 'pointer'
+            }}
+          >
+            <Table size={14} color={activeView === 'database' ? '#f3c64c' : 'currentColor'} /> Live Table Data Inspector
+          </button>
+          <button
+            onClick={() => setActiveView('schema')}
+            style={{
+              padding: '7px 18px',
+              borderRadius: 20,
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: activeView === 'schema' ? '#0f3d2e' : 'transparent',
+              color: activeView === 'schema' ? '#ffffff' : '#374151',
+              border: activeView === 'schema' ? '1px solid #0f3d2e' : '1px solid transparent',
+              cursor: 'pointer'
+            }}
+          >
+            <Layers size={14} color={activeView === 'schema' ? '#f3c64c' : 'currentColor'} /> ER Diagram & Schema (13 Entities)
+          </button>
+          <button
+            onClick={() => setActiveView('all')}
+            style={{
+              padding: '7px 18px',
+              borderRadius: 20,
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: activeView === 'all' ? '#0f3d2e' : 'transparent',
+              color: activeView === 'all' ? '#ffffff' : '#374151',
+              border: activeView === 'all' ? '1px solid #0f3d2e' : '1px solid transparent',
+              cursor: 'pointer'
+            }}
+          >
+            <Database size={14} color={activeView === 'all' ? '#f3c64c' : 'currentColor'} /> Combined Overview
+          </button>
         </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 250px), 1fr))',
-          gap: 16
-        }}>
-          {erDiagramSchema.map(item => {
-            const countInfo = tablesOverview.find(t => t.table === item.name);
-            const isSelected = selectedTable === item.name;
-
-            return (
-              <div
-                key={item.name}
-                onClick={() => setSelectedTable(item.name)}
-                style={{
-                  background: isSelected ? '#ffffff' : '#faf8f5',
-                  border: isSelected ? '2px solid #d4af37' : '1px solid #ebdcc0',
-                  borderRadius: 12,
-                  padding: 18,
-                  cursor: 'pointer',
-                  boxShadow: isSelected ? '0 4px 18px rgba(212, 175, 55, 0.25)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{
-                    fontSize: '1.05rem',
-                    fontWeight: 800,
-                    color: isSelected ? '#b38f20' : '#0f3d2e',
-                    fontFamily: 'Outfit'
-                  }}>
-                    {item.name}
-                  </span>
-                  <span className={`badge ${countInfo?.count > 0 ? 'badge-green' : 'badge-gold'}`}>
-                    {countInfo ? `${countInfo.count} rows` : '...'}
-                  </span>
-                </div>
-
-                <p style={{ fontSize: '0.78rem', color: '#666', lineHeight: 1.5, marginBottom: 12, minHeight: 34 }}>
-                  {item.purpose}
-                </p>
-
-                <div style={{ fontSize: '0.72rem', color: '#444', background: '#f5f0e6', padding: '6px 10px', borderRadius: 6 }}>
-                  <strong>PK:</strong> {item.pk}
-                  {item.fks.length > 0 && (
-                    <div style={{ marginTop: 2, color: '#0f3d2e' }}>
-                      <strong>FKs:</strong> {item.fks.join(', ')}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div style={{ fontSize: '0.78rem', color: '#6b7280', fontWeight: 600 }}>
+          {activeView === 'database' && `Inspecting: ${selectedTable}`}
+          {activeView === 'schema' && '13 Schema Entities with PK/FK definitions'}
+          {activeView === 'all' && 'Full Relational Model & Live Data'}
         </div>
       </div>
 
-      {/* 2. Live Table Data Inspector */}
-      {tableData && (
+      {/* Quick Table Switcher Bar when in database-only view */}
+      {activeView === 'database' && (
+        <div style={{
+          marginBottom: 20,
+          background: '#ffffff',
+          padding: '12px 16px',
+          borderRadius: 12,
+          border: '1px solid #ebdcc0',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#6b7280', marginBottom: 8 }}>
+            Select SQLite Table to Inspect:
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {erDiagramSchema.map(t => {
+              const count = tablesOverview.find(o => o.table === t.name)?.count;
+              const isSel = selectedTable === t.name;
+              return (
+                <button
+                  key={t.name}
+                  onClick={() => setSelectedTable(t.name)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    fontSize: '0.8rem',
+                    fontWeight: isSel ? 800 : 600,
+                    background: isSel ? '#0f3d2e' : '#f9fafb',
+                    color: isSel ? '#ffffff' : '#374151',
+                    border: isSel ? '1px solid #0f3d2e' : '1px solid #d1d5db',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <span>{t.name}</span>
+                  <span style={{
+                    fontSize: '0.7rem',
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                    background: isSel ? '#d4af37' : '#e5e7eb',
+                    color: isSel ? '#0a291f' : '#4b5563',
+                    fontWeight: 700
+                  }}>
+                    {count !== undefined ? count : '...'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 1. ER Diagram Entity Cards Matrix (Shown for 'schema' or 'all') */}
+      {(activeView === 'schema' || activeView === 'all') && (
+        <div style={{ marginBottom: 36 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: '1.35rem', color: '#0f3d2e', margin: 0 }}>
+              ER Schema Entities (13 Tables)
+            </h2>
+            <span style={{ fontSize: '0.82rem', color: '#666' }}>
+              Click any table below to inspect live records in real time
+            </span>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 250px), 1fr))',
+            gap: 16
+          }}>
+            {erDiagramSchema.map(item => {
+              const countInfo = tablesOverview.find(t => t.table === item.name);
+              const isSelected = selectedTable === item.name;
+
+              return (
+                <div
+                  key={item.name}
+                  onClick={() => {
+                    setSelectedTable(item.name);
+                    if (activeView === 'schema') {
+                      setActiveView('database');
+                    }
+                  }}
+                  style={{
+                    background: isSelected ? '#ffffff' : '#faf8f5',
+                    border: isSelected ? '2px solid #d4af37' : '1px solid #ebdcc0',
+                    borderRadius: 12,
+                    padding: 18,
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? '0 4px 18px rgba(212, 175, 55, 0.25)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{
+                      fontSize: '1.05rem',
+                      fontWeight: 800,
+                      color: isSelected ? '#b38f20' : '#0f3d2e',
+                      fontFamily: 'Outfit'
+                    }}>
+                      {item.name}
+                    </span>
+                    <span className={`badge ${countInfo?.count > 0 ? 'badge-green' : 'badge-gold'}`}>
+                      {countInfo ? `${countInfo.count} rows` : '...'}
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: '0.78rem', color: '#666', lineHeight: 1.5, marginBottom: 12, minHeight: 34 }}>
+                    {item.purpose}
+                  </p>
+
+                  <div style={{ fontSize: '0.72rem', color: '#444', background: '#f5f0e6', padding: '6px 10px', borderRadius: 6 }}>
+                    <strong>PK:</strong> {item.pk}
+                    {item.fks.length > 0 && (
+                      <div style={{ marginTop: 2, color: '#0f3d2e' }}>
+                        <strong>FKs:</strong> {item.fks.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Live Table Data Inspector (Shown for 'database' or 'all') */}
+      {(activeView === 'database' || activeView === 'all') && tableData && (
         <div className="card-luxury">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

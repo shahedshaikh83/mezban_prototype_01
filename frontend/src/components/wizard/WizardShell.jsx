@@ -15,6 +15,7 @@ export default function WizardShell({
   onClose,
   onFillSample,
   onClearForm,
+  onInstantEstimate,
   children
 }) {
   const formTopRef = useRef(null);
@@ -99,6 +100,29 @@ export default function WizardShell({
 
           {/* Quick Toolbar */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {onInstantEstimate && (
+              <button
+                type="button"
+                onClick={onInstantEstimate}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '7px 14px',
+                  background: 'linear-gradient(135deg, #0f3d2e 0%, #164e3b 100%)',
+                  border: '1.5px solid #d4af37',
+                  color: '#ffffff',
+                  borderRadius: 6,
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(15, 61, 46, 0.2)'
+                }}
+              >
+                <Sparkles size={14} color="#d4af37" /> Open Estimated Budget Page
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onFillSample}
@@ -332,27 +356,52 @@ export default function WizardShell({
 
             {/* Next / Submit Button on the RIGHT */}
             {currentStep < totalSteps - 1 ? (
-              <button
-                type="button"
-                onClick={onNext}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 28px',
-                  borderRadius: 6,
-                  background: '#0f3d2e',
-                  border: 'none',
-                  color: '#ffffff',
-                  fontWeight: 800,
-                  fontSize: '0.95rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(15, 61, 46, 0.25)',
-                  transition: 'background 0.15s'
-                }}
-              >
-                Next Step ({steps[currentStep + 1]?.letter}) <ArrowRight size={16} />
-              </button>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                {onInstantEstimate && (
+                  <button
+                    type="button"
+                    onClick={onInstantEstimate}
+                    disabled={isSubmitting}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '11px 18px',
+                      borderRadius: 6,
+                      background: '#fffdf7',
+                      border: '1.5px solid #d4af37',
+                      color: '#0f3d2e',
+                      fontWeight: 700,
+                      fontSize: '0.88rem',
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <Sparkles size={15} color="#d4af37" /> Submit & Open Estimated Budget
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onNext}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '12px 28px',
+                    borderRadius: 6,
+                    background: '#0f3d2e',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.95rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(15, 61, 46, 0.25)',
+                    transition: 'background 0.15s'
+                  }}
+                >
+                  Next Step ({steps[currentStep + 1]?.letter}) <ArrowRight size={16} />
+                </button>
+              </div>
             ) : (
               /* LAST STEP: Submit Button */
               <button
@@ -364,28 +413,29 @@ export default function WizardShell({
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 10,
-                  padding: '12px 20px',
+                  padding: '14px 28px',
                   borderRadius: 30,
-                  background: '#0f3d2e',
-                  border: 'none',
+                  background: 'linear-gradient(135deg, #0f3d2e 0%, #164e3b 100%)',
+                  border: '2px solid #d4af37',
                   color: '#ffffff',
-                  fontWeight: 800,
-                  fontSize: 'clamp(0.82rem, 2.8vw, 1rem)',
+                  fontWeight: 900,
+                  fontSize: 'clamp(0.88rem, 2.8vw, 1.05rem)',
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 8px 24px rgba(15, 61, 46, 0.3)',
+                  boxShadow: '0 8px 24px rgba(15, 61, 46, 0.35)',
                   transition: 'all 0.2s ease',
                   maxWidth: '100%',
                   textAlign: 'center',
                   whiteSpace: 'normal',
-                  wordBreak: 'break-word'
+                  wordBreak: 'break-word',
+                  letterSpacing: '0.02em'
                 }}
               >
                 {isSubmitting ? (
                   <RefreshCw size={18} className="spin" />
                 ) : (
-                  <Sparkles size={18} color="#d4af37" />
+                  <Sparkles size={20} color="#d4af37" />
                 )}
-                SUBMIT & GENERATE ESTIMATED BUDGET & QUOTATION
+                SUBMIT & OPEN ESTIMATED BUDGET PAGE
               </button>
             )}
           </div>

@@ -1,4 +1,6 @@
 
+import { getAdminAuthHeaders, isAdminAuthenticated } from './auth';
+
 /**
  * Shared API client for MEZBAAN
  */
@@ -34,15 +36,21 @@ export const getApiUrl = (endpoint) => {
   }
 
   const base = getApiBase();
-
   return `${base}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
 };
 
 export const apiFetch = async (endpoint, options = {}) => {
   const url = getApiUrl(endpoint);
+  const { asAdmin, ...fetchOptions } = options;
+
+  const authHeaders = asAdmin ? getAdminAuthHeaders(true) : {};
+  const mergedHeaders = {
+    ...authHeaders,
+    ...(fetchOptions.headers || {})
+  };
 
   try {
-    const res = await fetch(url, options);
+    const res = await fetch(url, { ...fetchOptions, headers: mergedHeaders });
     const rawText = await res.text();
 
     let data = null;

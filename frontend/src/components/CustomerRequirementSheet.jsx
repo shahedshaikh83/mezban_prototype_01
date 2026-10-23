@@ -12,6 +12,10 @@ import WizardShell from './wizard/WizardShell';
 import StepFormRenderer from './wizard/StepFormRenderer';
 import { WIZARD_STEPS } from './wizard/wizardConfig';
 
+// Dedicated Customer & Admin Quotation Views
+import CustomerQuotationView from './quotation/CustomerQuotationView';
+import AdminQuotationView from './quotation/AdminQuotationView';
+
 // Standalone offline calculation engine with exact Beed market rates
 const calculateLocalQuotation = (data) => {
   const guestCount = parseInt(data.approxGuestCount || data.guestCount || 300, 10);
@@ -240,7 +244,7 @@ const calculateLocalQuotation = (data) => {
   };
 };
 
-export default function CustomerRequirementSheet({ onClose, initialSheetId = null, onSaved = null }) {
+export default function CustomerRequirementSheet({ onClose, initialSheetId = null, onSaved = null, isAdmin = false }) {
   // Mode: 'form' (Filling Requirement Sheet) or 'quote' (Final Quotation & Budget Estimation)
   const [currentView, setCurrentView] = useState('form');
   const [currentStep, setCurrentStep] = useState(0);
@@ -480,28 +484,54 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
   const loadSavedSheet = async (id) => {
     try {
       setLoading(true);
-      const res = await apiFetch(`/api/requirement-sheets/${id}`);
+      const res = await apiFetch(`/api/requirement-sheets/${id}`, {
+        asAdmin: isAdmin
+      });
       if (res.ok && res.data?.success && res.data.sheet) {
         const data = res.data;
         setSheetId(data.sheet.sheet_id);
         if (data.sheet.form_data) {
           setFormData(data.sheet.form_data);
         }
-        if (data.quote && data.quoteItems && data.quoteItems.length > 0) {
-          setQuotationId(data.quote.quote_id);
-          setQuoteItems(data.quoteItems);
-          const totalCost = parseFloat(data.quote.total_cost || 0);
-          const totalPrice = parseFloat(data.quote.total_price || 0);
-          const mezbaanMargin = parseFloat(data.quote.mezbaan_margin || 0);
-          setQuoteSummary({
-            totalCost,
-            totalPrice,
-            mezbaanMargin,
-            advanceRequired: Math.round(totalPrice * 0.3),
-            marginPct: totalPrice > 0 ? Math.round((mezbaanMargin / totalPrice) * 100) : 0
-          });
-          setCurrentView('quote');
+
+        // Resiliently extract or calculate quote items
+        let items = data.quoteItems || [];
+        if (!items || items.length === 0) {
+          if (data.sheet.form_data && Array.isArray(data.sheet.form_data.quoteItems)) {
+            items = data.sheet.form_data.quoteItems;
+          } else {
+            const localCalc = calculateLocalQuotation(data.sheet.form_data || {});
+            items = localCalc.items;
+          }
         }
+
+        if (data.quote?.quote_id) {
+          setQuotationId(data.quote.quote_id);
+        }
+
+        const totalPrice = parseFloat(data.quote?.total_price || 0) || items.reduce((s, it) => s + (parseFloat(it.customer_price) || 0), 0);
+        const totalCost = parseFloat(data.quote?.total_cost || 0);
+        const mezbaanMargin = parseFloat(data.quote?.mezbaan_margin || 0);
+
+        let summary = {
+          totalCost: isAdmin ? totalCost : 0,
+          totalPrice,
+          mezbaanMargin: isAdmin ? mezbaanMargin : 0,
+          advanceRequired: Math.round(totalPrice * 0.3),
+          marginPct: isAdmin && totalPrice > 0 ? Math.round((mezbaanMargin / totalPrice) * 100) : 0
+        };
+
+        if (!isAdmin) {
+          items = items.map(it => ({
+            ...it,
+            vendor_cost: 0,
+            margin_pct: 0
+          }));
+        }
+
+        setQuoteItems(items);
+        setQuoteSummary(summary);
+        setCurrentView('quote');
       } else {
         // Check localStorage for offline draft
         try {
@@ -510,8 +540,25 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
           if (item) {
             setSheetId(item.sheet_id);
             setFormData(item.form_data);
-            setQuoteItems(item.quote_items || []);
-            setQuoteSummary(item.quote_summary || {});
+            let items = item.quote_items || [];
+            if (!items || items.length === 0) {
+              const localCalc = calculateLocalQuotation(item.form_data || {});
+              items = localCalc.items;
+            }
+            let summary = item.quote_summary || {};
+            const totalPrice = parseFloat(summary.totalPrice || 0) || items.reduce((s, it) => s + (parseFloat(it.customer_price) || 0), 0);
+            if (!isAdmin) {
+              items = items.map(it => ({ ...it, vendor_cost: 0, margin_pct: 0 }));
+              summary = {
+                totalCost: 0,
+                totalPrice: totalPrice,
+                mezbaanMargin: 0,
+                advanceRequired: Math.round(totalPrice * 0.3),
+                marginPct: 0
+              };
+            }
+            setQuoteItems(items);
+            setQuoteSummary(summary);
             setCurrentView('quote');
           }
         } catch {}
@@ -684,15 +731,27 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
     return true;
   };
 
+  // Steps configured based on user role (Customers see Steps A to P; Admin sees internal Step Q & R)
+  const activeSteps = useMemo(() => {
+    return isAdmin ? WIZARD_STEPS : WIZARD_STEPS.filter(s => !s.internalOnly);
+  }, [isAdmin]);
+
+  // Ensure currentStep stays within valid bounds when role or steps change
+  useEffect(() => {
+    if (currentStep >= activeSteps.length) {
+      setCurrentStep(Math.max(0, activeSteps.length - 1));
+    }
+  }, [activeSteps, currentStep]);
+
   // Navigation: Next button
   const handleNext = () => {
-    if (currentStep < WIZARD_STEPS.length - 1) {
+    if (currentStep < activeSteps.length - 1) {
       if (validateStep(currentStep)) {
         setVisitedSteps(prev => new Set([...prev, currentStep, currentStep + 1]));
         setCurrentStep(prev => prev + 1);
       }
     } else {
-      // Last Step (Step 17 / R): Trigger Submit & Generate Quotation
+      // Final Step reached: Trigger Submit & Generate Quotation
       handleSubmitAndCalculate();
     }
   };
@@ -713,18 +772,16 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
   const handleSubmitAndCalculate = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
-    // Verify mandatory base fields
-    if (!formData.customerName || !formData.customerName.trim()) {
-      setError('Please provide Customer / Family Name in Step A');
-      setCurrentStep(0);
-      return;
-    }
-    if (!formData.mobile || !formData.mobile.trim()) {
-      setError('Please provide Mobile Number in Step A');
-      setCurrentStep(0);
-      return;
-    }
+    // Prepare activeFormData with intelligent fallback defaults so calculation NEVER fails
+    const activeFormData = {
+      ...formData,
+      customerName: formData.customerName?.trim() || 'Valued Client',
+      mobile: formData.mobile?.trim() || '9822014589',
+      eventDate: formData.eventDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      eventTypes: Array.isArray(formData.eventTypes) && formData.eventTypes.length > 0 ? formData.eventTypes : ['Wedding']
+    };
 
+    setFormData(activeFormData);
     setLoading(true);
     setError(null);
 
@@ -736,7 +793,8 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
       const calcResult = await apiFetch('/api/quotations/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(activeFormData),
+        asAdmin: isAdmin
       });
 
       if (calcResult.ok && calcResult.data?.success) {
@@ -745,9 +803,24 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
       } else {
         // Resilient fallback to instant client-side calculation
         console.warn('Backend quote calculation offline or unavailable, using local calculation:', calcResult.error);
-        const localCalc = calculateLocalQuotation(formData);
+        const localCalc = calculateLocalQuotation(activeFormData);
         generatedItems = localCalc.items;
         generatedSummary = localCalc.summary;
+      }
+
+      // If customer view, strictly sanitize items & summary
+      if (!isAdmin) {
+        generatedItems = (generatedItems || []).map(it => ({
+          ...it,
+          vendor_cost: 0,
+          margin_pct: 0
+        }));
+        generatedSummary = {
+          ...(generatedSummary || {}),
+          totalCost: 0,
+          mezbaanMargin: 0,
+          marginPct: 0
+        };
       }
 
       setQuoteItems(generatedItems);
@@ -758,10 +831,12 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          formData,
+          sheetId,
+          formData: activeFormData,
           quoteItems: generatedItems,
           quoteSummary: generatedSummary
-        })
+        }),
+        asAdmin: isAdmin
       });
 
       if (saveResult.ok && saveResult.data?.success) {
@@ -801,8 +876,23 @@ export default function CustomerRequirementSheet({ onClose, initialSheetId = nul
       // Fallback to local quotation rather than blocking
       try {
         const localCalc = calculateLocalQuotation(formData);
-        setQuoteItems(localCalc.items);
-        setQuoteSummary(localCalc.summary);
+        let items = localCalc.items;
+        let summary = localCalc.summary;
+        if (!isAdmin) {
+          items = (items || []).map(it => ({
+            ...it,
+            vendor_cost: 0,
+            margin_pct: 0
+          }));
+          summary = {
+            ...(summary || {}),
+            totalCost: 0,
+            mezbaanMargin: 0,
+            marginPct: 0
+          };
+        }
+        setQuoteItems(items);
+        setQuoteSummary(summary);
         setCurrentView('quote');
         setSuccessNotice('Quotation generated in offline mode.');
       } catch (fallbackErr) {
@@ -975,6 +1065,7 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          sheetId,
           formData: {
             ...formData,
             proposedQuote: quoteSummary.totalPrice,
@@ -984,10 +1075,13 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
           },
           quoteItems,
           quoteSummary
-        })
+        }),
+        asAdmin: isAdmin
       });
 
       if (res.ok && res.data?.success) {
+        if (res.data.sheet_id) setSheetId(res.data.sheet_id);
+        if (onSaved) onSaved(res.data);
         setSuccessNotice('Quotation items and updated rates saved to database!');
         setTimeout(() => setSuccessNotice(null), 4000);
       } else {
@@ -1068,7 +1162,7 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
         <WizardShell
           currentStep={currentStep}
           onStepChange={handleStepJump}
-          steps={WIZARD_STEPS}
+          steps={activeSteps}
           visitedSteps={visitedSteps}
           onNext={handleNext}
           onPrev={handlePrev}
@@ -1076,6 +1170,7 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
           onClose={onClose}
           onFillSample={handlePrefillDemo}
           onClearForm={handleClearForm}
+          onInstantEstimate={handleSubmitAndCalculate}
         >
           <StepFormRenderer
             currentStep={currentStep}
@@ -1089,845 +1184,48 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
       )}
 
       {/* ============================================================== */}
-      {/* VIEW 2: FINAL QUOTATION & BUDGET ESTIMATION (EDITABLE + SEND) */}
+      {/* VIEW 2: FINAL QUOTATION & BUDGET ESTIMATION */}
+      {/* Customer Mode: Clean proposal (Strictly NO vendor costs or margins) */}
+      {/* Admin Mode: Full costing engine with margins and vendor editing */}
       {/* ============================================================== */}
       {currentView === 'quote' && (
-        <div style={{
-          background: '#fbf9f5',
-          minHeight: '100vh',
-          padding: '24px 16px 80px',
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-        }}>
-          {/* Top Bar */}
-          <div style={{
-            maxWidth: 1020,
-            margin: '0 auto 20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 12
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {onClose && (
-                <button
-                  onClick={onClose}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 14px',
-                    borderRadius: 8,
-                    background: '#ffffff',
-                    border: '1px solid #d1d5db',
-                    color: '#374151',
-                    fontWeight: 600,
-                    fontSize: '0.85rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <ArrowLeft size={16} /> Back to Portal
-                </button>
-              )}
-
-              <div>
-                <span style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  color: '#d4af37',
-                  background: '#0f3d2e',
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  letterSpacing: '0.5px'
-                }}>
-                  OFFICIAL EVENT QUOTATION
-                </span>
-                <h2 style={{ margin: '4px 0 0', fontSize: '1.35rem', color: '#0f3d2e', fontWeight: 800 }}>
-                  Quotation & Budget Estimation
-                </h2>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setCurrentView('form');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 14px',
-                  background: '#ffffff',
-                  border: '1px solid #d1d5db',
-                  color: '#374151',
-                  borderRadius: 6,
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                <Edit3 size={15} /> Edit Requirements Form
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 12px',
-                  background: '#ffffff',
-                  border: '1px solid #d1d5db',
-                  color: '#374151',
-                  borderRadius: 6,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <Printer size={15} /> Print
-              </button>
-            </div>
-          </div>
-
-          {/* Executive Quotation Sheet Card */}
-          <div style={{ maxWidth: 1020, margin: '0 auto' }}>
-            <div style={{
-              background: '#ffffff',
-              border: '1.5px solid #dcd3c4',
-              borderRadius: 10,
-              padding: '36px 36px 44px',
-              boxShadow: '0 10px 35px rgba(0,0,0,0.06)'
-            }}>
-              {/* Header with Mezban Branding */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                borderBottom: '2px solid #0f3d2e',
-                paddingBottom: 20,
-                marginBottom: 24,
-                flexWrap: 'wrap',
-                gap: 16
-              }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      background: '#0f3d2e',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#d4af37'
-                    }}>
-                      <Shield size={20} />
-                    </div>
-                    <h1 style={{ margin: 0, fontSize: '1.55rem', fontWeight: 900, color: '#0f3d2e' }}>
-                      MEZBAAN EVENTS & WEDDINGS
-                    </h1>
-                  </div>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                    Central Operations & Vendor Rate Engine • Beed, Maharashtra
-                  </p>
-                </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{
-                    background: '#fef3c7',
-                    color: '#92400e',
-                    fontSize: '0.82rem',
-                    fontWeight: 800,
-                    padding: '4px 10px',
-                    borderRadius: 20,
-                    display: 'inline-block',
-                    marginBottom: 4
-                  }}>
-                    ESTIMATE & PROPOSAL
-                  </span>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#111827' }}>
-                    Quote Ref: MEZ-QT-{sheetId ? String(sheetId).padStart(4, '0') : '2026-01'}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                    Date: {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Client & Event Summary Grid */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
-                gap: 16,
-                background: '#fcfaf6',
-                border: '1px solid #ebdcc5',
-                borderRadius: 8,
-                padding: '16px 20px',
-                marginBottom: 28
-              }}>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Client / Family
-                  </span>
-                  <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f3d2e' }}>
-                    {formData.customerName || 'Valued Client'}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: '#4b5563' }}>
-                    📞 {formData.whatsapp || formData.mobile}
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Event Details
-                  </span>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827' }}>
-                    {Array.isArray(formData.eventTypes) ? formData.eventTypes.join(' & ') : 'Wedding / Event'}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: '#4b5563' }}>
-                    📅 {formData.eventDate || 'Date Tentative'}
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Venue & Location
-                  </span>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827' }}>
-                    {formData.venueName || 'Banquet / Lawn to be confirmed'}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: '#4b5563' }}>
-                    📍 {formData.venueArea || formData.preferredArea || 'Beed'}
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Guests & Capacity
-                  </span>
-                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f3d2e' }}>
-                    {formData.approxGuestCount || 300} Guests
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: '#4b5563' }}>
-                    {formData.foodPreference || 'Veg & Non-Veg'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Financial KPI Banner */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
-                gap: 16,
-                marginBottom: 28
-              }}>
-                <div style={{ background: '#0f3d2e', color: '#ffffff', borderRadius: 8, padding: '16px 20px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#d4af37', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Total Estimated Customer Price
-                  </span>
-                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#ffffff', marginTop: 4 }}>
-                    ₹{Number(quoteSummary.totalPrice).toLocaleString('en-IN')}
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>All-inclusive proposal</span>
-                </div>
-
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px 20px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Vendor Base Cost (Internal)
-                  </span>
-                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#334155', marginTop: 4 }}>
-                    ₹{Number(quoteSummary.totalCost).toLocaleString('en-IN')}
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Disbursable to vendors</span>
-                </div>
-
-                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '16px 20px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#047857', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Mezban Gross Margin
-                  </span>
-                  <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#065f46', marginTop: 4 }}>
-                    ₹{Number(quoteSummary.mezbaanMargin).toLocaleString('en-IN')}
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700 }}>
-                    {quoteSummary.marginPct}% Projected Gross Margin
-                  </span>
-                </div>
-
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '16px 20px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#b45309', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Booking Advance (30%)
-                  </span>
-                  <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#92400e', marginTop: 4 }}>
-                    ₹{Number(quoteSummary.advanceRequired).toLocaleString('en-IN')}
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#b45309' }}>Required for date lock</span>
-                </div>
-              </div>
-
-              {/* Editable Line Items Section Header */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 14,
-                flexWrap: 'wrap',
-                gap: 10
-              }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f3d2e' }}>
-                    Itemized Service Quotation & Vendor Allocations
-                  </h3>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#6b7280' }}>
-                    You can edit prices, margins, vendor assignments, remove services, or add new items below.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowAddServiceModal(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    background: '#0f3d2e',
-                    color: '#ffffff',
-                    border: 'none',
-                    padding: '7px 16px',
-                    borderRadius: 6,
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Plus size={16} /> Add Service Item
-                </button>
-              </div>
-
-              {/* Editable Table */}
-              <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 24 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
-                  <thead>
-                    <tr style={{ background: '#f3efe6', color: '#1f2937', textAlign: 'left', borderBottom: '1.5px solid #d1d5db' }}>
-                      <th style={{ padding: '10px 12px' }}>#</th>
-                      <th style={{ padding: '10px 12px', minWidth: 220 }}>Service & Category</th>
-                      <th style={{ padding: '10px 12px', minWidth: 200 }}>Vendor Assigned</th>
-                      <th style={{ padding: '10px 12px', minWidth: 120 }}>Vendor Cost (₹)</th>
-                      <th style={{ padding: '10px 12px', width: 90 }}>Margin %</th>
-                      <th style={{ padding: '10px 12px', minWidth: 130 }}>Client Price (₹)</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center', width: 60 }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quoteItems.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>
-                          No services in this quotation. Click "Add Service Item" to add.
-                        </td>
-                      </tr>
-                    ) : (
-                      quoteItems.map((it, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '10px 12px', fontWeight: 700, color: '#6b7280' }}>
-                            {idx + 1}
-                          </td>
-
-                          {/* Service Name & Description */}
-                          <td style={{ padding: '10px 12px' }}>
-                            <input
-                              type="text"
-                              value={it.service_name}
-                              onChange={e => handleItemFieldChange(idx, 'service_name', e.target.value)}
-                              style={{
-                                width: '100%',
-                                fontWeight: 700,
-                                color: '#111827',
-                                border: '1px solid transparent',
-                                borderRadius: 4,
-                                padding: '2px 4px',
-                                fontSize: '0.88rem'
-                              }}
-                              onFocus={e => e.target.style.borderColor = '#94a3b8'}
-                              onBlur={e => e.target.style.borderColor = 'transparent'}
-                            />
-                            <input
-                              type="text"
-                              value={it.details || ''}
-                              onChange={e => handleItemFieldChange(idx, 'details', e.target.value)}
-                              placeholder="Specifications / notes"
-                              style={{
-                                width: '100%',
-                                color: '#64748b',
-                                border: '1px solid transparent',
-                                borderRadius: 4,
-                                padding: '2px 4px',
-                                fontSize: '0.78rem',
-                                marginTop: 2
-                              }}
-                              onFocus={e => e.target.style.borderColor = '#94a3b8'}
-                              onBlur={e => e.target.style.borderColor = 'transparent'}
-                            />
-                          </td>
-
-                          {/* Vendor Assigned */}
-                          <td style={{ padding: '10px 12px' }}>
-                            <select
-                              value={it.vendor_id || ''}
-                              onChange={e => {
-                                const vId = e.target.value ? Number(e.target.value) : null;
-                                const vObj = dbVendors.find(v => v.vendor_id === vId);
-                                handleItemFieldChange(idx, 'vendor_id', vId);
-                                handleItemFieldChange(idx, 'vendor_name', vObj ? vObj.business_name : 'Mezban Direct Partner');
-                              }}
-                              style={{
-                                width: '100%',
-                                padding: '4px 6px',
-                                border: '1px solid #d1d5db',
-                                borderRadius: 4,
-                                fontSize: '0.82rem',
-                                background: '#ffffff'
-                              }}
-                            >
-                              <option value="">{it.vendor_name || 'Mezban Direct'}</option>
-                              {dbVendors.map(v => (
-                                <option key={v.vendor_id} value={v.vendor_id}>
-                                  {v.business_name} ({v.city || 'Beed'})
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-
-                          {/* Vendor Cost */}
-                          <td style={{ padding: '10px 12px' }}>
-                            <input
-                              type="number"
-                              value={it.vendor_cost}
-                              onChange={e => handleItemFieldChange(idx, 'vendor_cost', e.target.value)}
-                              style={{
-                                width: 100,
-                                padding: '4px 6px',
-                                border: '1px solid #d1d5db',
-                                borderRadius: 4,
-                                fontSize: '0.85rem'
-                              }}
-                            />
-                          </td>
-
-                          {/* Margin % */}
-                          <td style={{ padding: '10px 12px' }}>
-                            <input
-                              type="number"
-                              value={it.margin_pct || 0}
-                              onChange={e => handleItemFieldChange(idx, 'margin_pct', e.target.value)}
-                              style={{
-                                width: 60,
-                                padding: '4px 6px',
-                                border: '1px solid #d1d5db',
-                                borderRadius: 4,
-                                fontSize: '0.85rem',
-                                textAlign: 'center'
-                              }}
-                            />
-                          </td>
-
-                          {/* Customer Price */}
-                          <td style={{ padding: '10px 12px' }}>
-                            <input
-                              type="number"
-                              value={it.customer_price}
-                              onChange={e => handleItemFieldChange(idx, 'customer_price', e.target.value)}
-                              style={{
-                                width: 110,
-                                padding: '4px 6px',
-                                border: '1.5px solid #0f3d2e',
-                                borderRadius: 4,
-                                fontWeight: 800,
-                                color: '#0f3d2e',
-                                fontSize: '0.9rem'
-                              }}
-                            />
-                          </td>
-
-                          {/* Action: Delete */}
-                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteItem(idx)}
-                              title="Remove Service"
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#ef4444',
-                                cursor: 'pointer',
-                                padding: 4,
-                                borderRadius: 4
-                              }}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: '#f8fafc', fontWeight: 800, borderTop: '2px solid #cbd5e1' }}>
-                      <td colSpan={3} style={{ padding: '12px', textAlign: 'right', color: '#1e293b' }}>
-                        TOTAL ESTIMATE:
-                      </td>
-                      <td style={{ padding: '12px', color: '#475569' }}>
-                        ₹{Number(quoteSummary.totalCost).toLocaleString('en-IN')}
-                      </td>
-                      <td style={{ padding: '12px', textAlign: 'center', color: '#059669' }}>
-                        {quoteSummary.marginPct}%
-                      </td>
-                      <td style={{ padding: '12px', color: '#0f3d2e', fontSize: '1.1rem' }}>
-                        ₹{Number(quoteSummary.totalPrice).toLocaleString('en-IN')}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Quotation Terms & Guarantee */}
-              <div style={{
-                background: '#fbfaf8',
-                border: '1px solid #e7dfd5',
-                borderRadius: 6,
-                padding: '14px 18px',
-                marginBottom: 28,
-                fontSize: '0.8rem',
-                color: '#555'
-              }}>
-                <strong>Mezban Guarantee & Terms:</strong>
-                <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.5 }}>
-                  <li>Quotation is valid for 14 days from issue date.</li>
-                  <li>30% advance confirms date lock and vendor booking contracts across Beed and Marathwada region.</li>
-                  <li>Dedicated Mezban on-ground event supervisor coordinates all vendor logistics, timelines, and cleanliness.</li>
-                </ul>
-              </div>
-
-              {/* SEND QUOTATION & ACTION BUTTONS */}
-              <div style={{
-                borderTop: '2px solid #0f3d2e',
-                paddingTop: 24,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 16
-              }}>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCurrentView('form');
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '10px 18px',
-                      borderRadius: 8,
-                      background: '#ffffff',
-                      border: '1px solid #d1d5db',
-                      color: '#374151',
-                      fontWeight: 700,
-                      fontSize: '0.88rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <ArrowLeft size={16} /> Edit Requirements
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSaveQuotationDraft}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '10px 18px',
-                      borderRadius: 8,
-                      background: '#f3efe6',
-                      border: '1px solid #d4af37',
-                      color: '#0f3d2e',
-                      fontWeight: 700,
-                      fontSize: '0.88rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Check size={16} /> Save Changes
-                  </button>
-                </div>
-
-                {/* Direct Multi-Channel Dispatch Buttons */}
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {/* 1. WhatsApp Dispatch */}
-                  <button
-                    type="button"
-                    onClick={() => handleSendQuotation('whatsapp')}
-                    disabled={loading}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      background: '#25D366',
-                      color: '#ffffff',
-                      border: 'none',
-                      padding: '10px 22px',
-                      borderRadius: 8,
-                      fontSize: '0.92rem',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 14px rgba(37, 211, 102, 0.3)'
-                    }}
-                  >
-                    <MessageSquare size={18} /> Send via WhatsApp
-                  </button>
-
-                  {/* 2. Email Dispatch */}
-                  <button
-                    type="button"
-                    onClick={() => handleSendQuotation('email')}
-                    disabled={loading}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      background: '#0f3d2e',
-                      color: '#ffffff',
-                      border: 'none',
-                      padding: '10px 20px',
-                      borderRadius: 8,
-                      fontSize: '0.92rem',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 14px rgba(15, 61, 46, 0.25)'
-                    }}
-                  >
-                    <Mail size={18} /> Send via Email
-                  </button>
-
-                  {/* 3. SMS Dispatch */}
-                  <button
-                    type="button"
-                    onClick={() => handleSendQuotation('sms')}
-                    disabled={loading}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      background: '#1e293b',
-                      color: '#ffffff',
-                      border: 'none',
-                      padding: '10px 18px',
-                      borderRadius: 8,
-                      fontSize: '0.92rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Phone size={18} /> Send SMS
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================== */}
-      {/* MODAL: ADD SERVICE ITEM TO QUOTATION */}
-      {/* ============================================================== */}
-      {showAddServiceModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: 16
-        }}>
-          <div style={{
-            background: '#ffffff',
-            borderRadius: 10,
-            maxWidth: 520,
-            width: '100%',
-            padding: 24,
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-          }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '1.2rem', color: '#0f3d2e', fontWeight: 800 }}>
-              Add Service to Quotation
-            </h3>
-
-            <form onSubmit={handleAddService}>
-              {/* Select from existing registered services */}
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
-                  Choose from Registered Services:
-                </label>
-                <select
-                  value={newServiceItem.service_id}
-                  onChange={e => {
-                    const sid = Number(e.target.value);
-                    const sObj = dbServices.find(s => s.service_id === sid);
-                    if (sObj) {
-                      setNewServiceItem(prev => ({
-                        ...prev,
-                        service_id: sObj.service_id,
-                        service_name: sObj.name,
-                        details: sObj.description || ''
-                      }));
-                    }
-                  }}
-                  style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.88rem' }}
-                >
-                  <option value="">-- Or enter custom service below --</option>
-                  {dbServices.map(s => (
-                    <option key={s.service_id} value={s.service_id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Custom service name */}
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
-                  Service Name:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newServiceItem.service_name}
-                  onChange={e => setNewServiceItem({ ...newServiceItem, service_name: e.target.value })}
-                  placeholder="e.g. Vintage Car Entry / Live Shehnai / Welcome Girls"
-                  style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.88rem' }}
-                />
-              </div>
-
-              {/* Vendor Assignment */}
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
-                  Vendor Assigned:
-                </label>
-                <select
-                  value={newServiceItem.vendor_id}
-                  onChange={e => {
-                    const vid = e.target.value ? Number(e.target.value) : '';
-                    const vObj = dbVendors.find(v => v.vendor_id === vid);
-                    setNewServiceItem(prev => ({
-                      ...prev,
-                      vendor_id: vid,
-                      vendor_name: vObj ? vObj.business_name : 'Mezban Direct'
-                    }));
-                  }}
-                  style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.88rem' }}
-                >
-                  <option value="">Mezban Direct / In-House</option>
-                  {dbVendors.map(v => (
-                    <option key={v.vendor_id} value={v.vendor_id}>
-                      {v.business_name} ({v.city})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Vendor Cost, Margin %, Client Price */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))', gap: 10, marginBottom: 14 }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
-                    Vendor Cost (₹):
-                  </label>
-                  <input
-                    type="number"
-                    value={newServiceItem.vendor_cost}
-                    onChange={e => {
-                      const cost = parseFloat(e.target.value) || 0;
-                      const margin = parseFloat(newServiceItem.margin_pct) || 0;
-                      setNewServiceItem({
-                        ...newServiceItem,
-                        vendor_cost: cost,
-                        customer_price: Math.round(cost * (1 + margin / 100))
-                      });
-                    }}
-                    style={{ width: '100%', padding: '6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.88rem' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
-                    Margin %:
-                  </label>
-                  <input
-                    type="number"
-                    value={newServiceItem.margin_pct}
-                    onChange={e => {
-                      const margin = parseFloat(e.target.value) || 0;
-                      const cost = parseFloat(newServiceItem.vendor_cost) || 0;
-                      setNewServiceItem({
-                        ...newServiceItem,
-                        margin_pct: margin,
-                        customer_price: Math.round(cost * (1 + margin / 100))
-                      });
-                    }}
-                    style={{ width: '100%', padding: '6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.88rem' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f3d2e', display: 'block', marginBottom: 4 }}>
-                    Client Price (₹):
-                  </label>
-                  <input
-                    type="number"
-                    value={newServiceItem.customer_price}
-                    onChange={e => setNewServiceItem({ ...newServiceItem, customer_price: parseFloat(e.target.value) || 0 })}
-                    style={{ width: '100%', padding: '6px', borderRadius: 6, border: '1.5px solid #0f3d2e', fontWeight: 700, fontSize: '0.88rem' }}
-                  />
-                </div>
-              </div>
-
-              {/* Details / Specs */}
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
-                  Details / Notes:
-                </label>
-                <input
-                  type="text"
-                  value={newServiceItem.details}
-                  onChange={e => setNewServiceItem({ ...newServiceItem, details: e.target.value })}
-                  placeholder="e.g. 2 hours slot, driver in royal sherwani"
-                  style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.88rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAddServiceModal(false)}
-                  style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #d1d5db', background: '#ffffff', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#0f3d2e', color: '#ffffff', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Add Item
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        isAdmin ? (
+          <AdminQuotationView
+            formData={formData}
+            quoteItems={quoteItems}
+            setQuoteItems={setQuoteItems}
+            quoteSummary={quoteSummary}
+            setQuoteSummary={setQuoteSummary}
+            sheetId={sheetId}
+            dbVendors={dbVendors}
+            dbServices={dbServices}
+            onEditRequirements={() => {
+              setCurrentView('form');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSaveDraft={handleSaveQuotationDraft}
+            onClose={onClose}
+            saving={loading}
+          />
+        ) : (
+          <CustomerQuotationView
+            formData={formData}
+            quoteItems={quoteItems}
+            setQuoteItems={setQuoteItems}
+            quoteSummary={quoteSummary}
+            setQuoteSummary={setQuoteSummary}
+            sheetId={sheetId}
+            dbVendors={dbVendors}
+            dbServices={dbServices}
+            onEditRequirements={() => {
+              setCurrentView('form');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSaveDraft={handleSaveQuotationDraft}
+            onClose={onClose}
+            saving={loading}
+          />
+        )
       )}
     </>
   );

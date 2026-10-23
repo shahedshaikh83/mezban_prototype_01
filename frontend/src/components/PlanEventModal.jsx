@@ -3,7 +3,7 @@ import { X, Calendar, MapPin, Users, IndianRupee, Check, Sparkles, AlertCircle }
 
 import { FALLBACK_VENUES, FALLBACK_SERVICES } from '../data/mockData';
 
-export default function PlanEventModal({ isOpen, onClose, onEventCreated }) {
+export default function PlanEventModal({ isOpen, onClose, onEventCreated, onOpenQuotation }) {
   const [venues, setVenues] = useState(FALLBACK_VENUES);
   const [services, setServices] = useState(FALLBACK_SERVICES);
   const [loading, setLoading] = useState(false);
@@ -56,34 +56,198 @@ export default function PlanEventModal({ isOpen, onClose, onEventCreated }) {
     });
   };
 
+  // Calculate estimated quotation items based on selected services and guest count
+  const calculateEstimate = (form) => {
+    const guests = parseInt(form.guest_count, 10) || 300;
+    const selected = Array.isArray(form.selected_services) ? form.selected_services : [];
+    const items = [];
+
+    // 1. Catering
+    if (selected.includes(2) || selected.some(s => typeof s === 'string' && s.toLowerCase().includes('cater'))) {
+      const cost = Math.round(guests * 380);
+      items.push({
+        service_id: 2,
+        service_name: 'Royal Catering & Dastarkhwan (Dinner)',
+        category: 'Catering & Dastarkhwan',
+        customer_price: cost,
+        vendor_name: 'Royal Beed Dastarkhwan & Caterers',
+        details: `${guests} Guests @ ₹380/person (Authentic Beed Mughlai / Dum Biryani)`
+      });
+    }
+
+    // 2. Decor
+    if (selected.includes(4) || selected.some(s => typeof s === 'string' && s.toLowerCase().includes('decor'))) {
+      items.push({
+        service_id: 4,
+        service_name: 'Royal Theme Decoration & Stage Setup',
+        category: 'Decoration & Theme Setup',
+        customer_price: 45000,
+        vendor_name: 'Noor Mandap & Floral Elegance',
+        details: 'Main stage floral setup, entrance gate, VIP backdrop, ambient lighting'
+      });
+    }
+
+    // 3. Photography
+    if (selected.includes(6) || selected.some(s => typeof s === 'string' && s.toLowerCase().includes('photo'))) {
+      items.push({
+        service_id: 6,
+        service_name: 'Cinematic Photography & 4K Video Coverage',
+        category: 'Photography & Cinematic Media',
+        customer_price: 38000,
+        vendor_name: 'Beed Royal Studio & Films',
+        details: 'Traditional + Candid photographers, 4K video, Drone shoot, Premium Album'
+      });
+    }
+
+    // 4. Sound & Lights
+    if (selected.includes(5) || selected.some(s => typeof s === 'string' && s.toLowerCase().includes('sound'))) {
+      items.push({
+        service_id: 5,
+        service_name: 'Acoustic Sound System & Ambient Stage Lighting',
+        category: 'Sound, Lights & Entertainment',
+        customer_price: 18000,
+        vendor_name: 'Star Audio & Stage Lights',
+        details: 'JBL Line array sound, wireless microphones, focus stage lighting'
+      });
+    }
+
+    // 5. Stage & Shamiana
+    if (selected.includes(3) || selected.some(s => typeof s === 'string' && s.toLowerCase().includes('tent'))) {
+      items.push({
+        service_id: 3,
+        service_name: 'Grand Stage, VIP Sofas & Shamiana Seating',
+        category: 'Stage & Seating',
+        customer_price: 24000,
+        vendor_name: 'Noor Mandap & Floral Elegance',
+        details: `Grand elevated stage, VIP royal couches, ${guests} banquet chairs & dining tables`
+      });
+    }
+
+    // 6. Venue Liaison
+    if (form.venue_id) {
+      const v = venues.find(vn => String(vn.venue_id) === String(form.venue_id));
+      const venuePrice = v ? parseFloat(v.price_per_day || 60000) : 60000;
+      items.push({
+        service_id: 1,
+        service_name: `Venue Liaison: ${v?.name || 'Prime Banquet Hall & Lawn'}`,
+        category: 'Venue & Hospitality',
+        customer_price: venuePrice,
+        vendor_name: v?.name || 'Mezban Verified Venue Partner',
+        details: `${v?.capacity || guests} capacity, AC Hall, generator backup, ${form.location || 'Beed'}`
+      });
+    }
+
+    // 7. Mezban Supervision
+    items.push({
+      service_id: 1,
+      service_name: 'Mezban On-Ground Event Coordination & Supervision',
+      category: 'Hospitality & Coordination',
+      customer_price: 25000,
+      vendor_name: 'Mezban Operations Team (Beed)',
+      details: 'Full day on-ground supervisor, timeline enforcement & 100% stress-free guarantee'
+    });
+
+    const totalPrice = items.reduce((sum, it) => sum + (parseFloat(it.customer_price) || 0), 0);
+    const advanceRequired = Math.round(totalPrice * 0.30);
+    return { items, summary: { totalPrice, advanceRequired } };
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
+    const calculatedQuote = calculateEstimate(formData);
+    let createdSheetId = null;
+
     try {
+      // 1. Submit enquiry record
       const res = await fetch('/api/enquiries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
       const data = await res.json();
+
+      // 2. Also register official requirement sheet with quote items in backend
+      try {
+        const sheetRes = await fetch('/api/requirement-sheets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            formData: {
+              customerName: formData.name || 'Valued Client',
+              mobile: formData.phone || '9822014589',
+              email: formData.email,
+              eventTypes: [formData.event_type || 'Wedding'],
+              eventDate: formData.event_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+              approxGuestCount: formData.guest_count || 300,
+              venueArea: formData.location || 'Beed',
+              approxBudget: formData.budget || calculatedQuote.summary.totalPrice,
+              notes: formData.special_requirements
+            },
+            quoteItems: calculatedQuote.items,
+            quoteSummary: calculatedQuote.summary
+          })
+        });
+        const sheetData = await sheetRes.json();
+        if (sheetData.success && sheetData.sheet_id) {
+          createdSheetId = sheetData.sheet_id;
+        }
+      } catch (sheetErr) {
+        console.warn('Auto-generation of requirement sheet error:', sheetErr);
+      }
+
       if (data.success) {
-        setSuccessData(data);
-        if (onEventCreated) onEventCreated(data);
+        const fullSuccessData = {
+          ...data,
+          sheet_id: createdSheetId,
+          quote: calculatedQuote
+        };
+        if (onEventCreated) onEventCreated(fullSuccessData);
+
+        // Automatically open the estimated budget page immediately upon submit!
+        if (typeof onOpenQuotation === 'function') {
+          onOpenQuotation(createdSheetId);
+        } else {
+          setSuccessData(fullSuccessData);
+        }
       } else {
         setError(data.message || 'Failed to submit enquiry');
       }
     } catch {
-      // In offline/Live Server mode without backend, provide simulated success
-      const simulatedSuccess = {
-        success: true,
-        event_id: Math.floor(100 + Math.random() * 900),
-        tracking_code: 'MZB-2026-' + Math.floor(1000 + Math.random() * 9000),
-        message: 'Event requirement recorded successfully!'
-      };
-      setSuccessData(simulatedSuccess);
-      if (onEventCreated) onEventCreated(simulatedSuccess);
+      // In offline/Live Server mode without backend, save to local storage and open estimated budget page
+      const localId = `local_${Date.now()}`;
+      try {
+        const existing = JSON.parse(localStorage.getItem('mezban_draft_sheets') || '[]');
+        existing.unshift({
+          sheet_id: localId,
+          customer_name: formData.name || 'Valued Client',
+          event_type: formData.event_type || 'Wedding',
+          event_date: formData.event_date || new Date().toISOString().split('T')[0],
+          mobile: formData.phone || '9822014589',
+          form_data: formData,
+          quote_items: calculatedQuote.items,
+          quote_summary: calculatedQuote.summary,
+          created_at: new Date().toISOString()
+        });
+        localStorage.setItem('mezban_draft_sheets', JSON.stringify(existing.slice(0, 50)));
+      } catch {}
+
+      if (typeof onOpenQuotation === 'function') {
+        onOpenQuotation(localId);
+      } else {
+        const simulatedSuccess = {
+          success: true,
+          event_id: Math.floor(100 + Math.random() * 900),
+          event_code: 'MZB-2026-' + Math.floor(1000 + Math.random() * 9000),
+          message: 'Event requirement recorded successfully!',
+          sheet_id: localId,
+          quote: calculatedQuote
+        };
+        setSuccessData(simulatedSuccess);
+        if (onEventCreated) onEventCreated(simulatedSuccess);
+      }
     } finally {
       setLoading(false);
     }
@@ -108,45 +272,116 @@ export default function PlanEventModal({ isOpen, onClose, onEventCreated }) {
         </div>
 
         {successData ? (
-          <div style={{ textAlign: 'center', padding: '24px 10px' }}>
+          <div style={{ textAlign: 'center', padding: '16px 6px' }}>
             <div style={{
-              width: 64,
-              height: 64,
+              width: 56,
+              height: 56,
               borderRadius: '50%',
               background: '#eaf5ee',
               color: '#0e633d',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 18px',
+              margin: '0 auto 14px',
               border: '2px solid #a9dec1'
             }}>
-              <Check size={36} />
+              <Check size={32} />
             </div>
-            <h3 style={{ fontSize: '1.4rem', color: '#0f3d2e', marginBottom: 8 }}>
-              Event Requirement Registered!
+            <h3 style={{ fontSize: '1.35rem', color: '#0f3d2e', marginBottom: 6, fontWeight: 800 }}>
+              Event Requirement Registered & Quotation Generated!
             </h3>
             <div style={{
               display: 'inline-block',
               background: '#fbf5df',
               border: '1px solid #ebd998',
               borderRadius: 8,
-              padding: '8px 20px',
+              padding: '6px 16px',
               fontWeight: 800,
               color: '#946f05',
-              fontSize: '1.1rem',
+              fontSize: '0.98rem',
               letterSpacing: '0.05em',
               marginBottom: 16
             }}>
-              Reference ID: {successData.event_code}
+              Reference ID: {successData.event_code || 'MEZ-2026-CONFIRMED'}
             </div>
-            <p style={{ color: '#4b5563', fontSize: '0.92rem', lineHeight: 1.6, maxWidth: 500, margin: '0 auto 24px' }}>
-              Your event requirement has been recorded in the MEZBAAN database. Our dedicated event coordinator is reviewing your services and matching available preferred vendors in Beed.
+
+            {/* Estimated Cost Summary Card */}
+            {successData.quote && (
+              <div style={{
+                background: '#ffffff',
+                border: '1.5px solid #d4af37',
+                borderRadius: 12,
+                padding: '20px',
+                margin: '0 auto 20px',
+                maxWidth: 520,
+                textAlign: 'left',
+                boxShadow: '0 4px 18px rgba(15, 61, 46, 0.08)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee5d4', paddingBottom: 12, marginBottom: 14 }}>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#6b7280', fontWeight: 800, letterSpacing: '0.5px' }}>
+                      Official Estimated Price
+                    </span>
+                    <div style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0f3d2e', fontFamily: 'Outfit' }}>
+                      ₹{Number(successData.quote.summary.totalPrice).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#92400e', fontWeight: 800 }}>
+                      30% Date Lock Advance
+                    </span>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#92400e', fontFamily: 'Outfit' }}>
+                      ₹{Number(successData.quote.summary.advanceRequired).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.8rem', color: '#374151', marginBottom: 8, fontWeight: 700 }}>
+                  Included Services ({successData.quote.items.length} Items):
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto', paddingRight: 4 }}>
+                  {successData.quote.items.map((it, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '4px 8px', background: '#fdfbf7', borderRadius: 6, border: '1px solid #f1eae0' }}>
+                      <span style={{ color: '#1f2937', fontWeight: 600 }}>{it.service_name}</span>
+                      <span style={{ color: '#0f3d2e', fontWeight: 800 }}>₹{Number(it.customer_price).toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p style={{ color: '#4b5563', fontSize: '0.88rem', lineHeight: 1.55, maxWidth: 500, margin: '0 auto 20px' }}>
+              Your event requirements and quotation have been registered. You can now open the complete itemized estimated cost page to edit services, download PDF, or send directly via WhatsApp.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
               <button
-                onClick={onClose}
+                type="button"
+                onClick={() => {
+                  if (onOpenQuotation) {
+                    onOpenQuotation(successData.sheet_id);
+                  } else {
+                    onClose();
+                  }
+                }}
                 className="btn-gold"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 24px',
+                  fontSize: '0.96rem',
+                  fontWeight: 800,
+                  boxShadow: '0 4px 16px rgba(15, 61, 46, 0.25)'
+                }}
+              >
+                <Sparkles size={18} /> OPEN ESTIMATED COST PAGE & QUOTATION
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn-outline"
+                style={{ padding: '12px 20px', fontSize: '0.88rem' }}
               >
                 Close & View Portals
               </button>

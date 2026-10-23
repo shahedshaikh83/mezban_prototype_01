@@ -78,17 +78,20 @@ export default function Footer({ setActivePortal, openPlanModal }) {
               <a onClick={() => setActivePortal('website')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
                 • Public Website & Event Catalogue
               </a>
-              <a onClick={() => setActivePortal('customer')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Customer Portal (Quotes & Approvals)
+              <a onClick={() => setActivePortal('requirements')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
+                • Customer Event Requirement Intake
               </a>
-              <a onClick={() => setActivePortal('vendor')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Vendor Portal (Bids & Rate Cards)
+              <a onClick={() => setActivePortal('admin', 'dashboard')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
+                • Admin OS: Central Management Console
               </a>
-              <a onClick={() => setActivePortal('admin')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Mezbaan Admin Operating System
+              <a onClick={() => setActivePortal('admin', 'customer')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
+                • Admin OS: Customer Portal & Invoices
               </a>
-              <a onClick={() => setActivePortal('database')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Central Relational ER Database (SQLite)
+              <a onClick={() => setActivePortal('admin', 'vendor')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
+                • Admin OS: Vendor Partner Portal
+              </a>
+              <a onClick={() => setActivePortal('admin', 'database')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
+                • Admin OS: Central ER Database (SQLite)
               </a>
             </div>
           </div>

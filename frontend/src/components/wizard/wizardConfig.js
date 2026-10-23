@@ -17,7 +17,7 @@ export const WIZARD_STEPS = [
   { index: 13, letter: 'N', key: 'prev_exp', title: "N. Customer's Previous Experience", shortTitle: 'Experience' },
   { index: 14, letter: 'O', key: 'customer_exp', title: 'O. Customer Expectation From Mezban', shortTitle: 'Expectation' },
   { index: 15, letter: 'P', key: 'quote_req', title: 'P. Quotation Requirement', shortTitle: 'Quotation Req' },
-  { index: 16, letter: 'Q', key: 'follow_up', title: 'Q. Follow-Up', shortTitle: 'Follow-Up' },
+  { index: 16, letter: 'Q', key: 'follow_up', title: 'Q. Follow-Up', shortTitle: 'Follow-Up', internalOnly: true },
   { index: 17, letter: 'R', key: 'internal_use', title: 'R. Mezban Internal Use', shortTitle: 'Internal Use', internalOnly: true }
 ];
 

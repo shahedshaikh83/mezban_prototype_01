@@ -12,6 +12,66 @@ app.use(express.json());
 initDatabase();
 
 // -------------------------------------------------------------
+// ADMIN AUTHORIZATION & ROLE-BASED SERIALIZATION ENGINE
+// -------------------------------------------------------------
+const MEZBAAN_ADMIN_SECRET = process.env.MEZBAAN_ADMIN_SECRET || 'mezbaan_admin_sec_2026_beed_token';
+
+/**
+ * Checks whether the incoming request has verified Administrator privileges.
+ * Note: Never trusts user-controlled query params, body role flags, or unauthenticated headers.
+ */
+function isAuthorizedAdmin(req) {
+  const authHeader = req.headers.authorization || req.headers['x-admin-token'] || '';
+  if (!authHeader) return false;
+
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+  return token === MEZBAAN_ADMIN_SECRET;
+}
+
+/**
+ * Strips internal financial fields (vendor_cost, margin_pct, etc.)
+ * from quotation items for customer-facing consumption.
+ */
+function sanitizeCustomerQuoteItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map(it => ({
+    quote_item_id: it.quote_item_id,
+    service_id: it.service_id,
+    service_name: it.service_name,
+    category: it.category,
+    vendor_name: it.vendor_name || 'Mezban Verified Partner',
+    customer_price: parseFloat(it.customer_price || 0),
+    details: it.details || ''
+    // vendor_cost, margin_pct, and internal cost formulas are strictly omitted
+  }));
+}
+
+/**
+ * Strips internal financial fields (totalCost, mezbaanMargin, marginPct)
+ * from quotation summary for customer-facing consumption.
+ */
+function sanitizeCustomerQuoteSummary(summary) {
+  if (!summary) return null;
+  return {
+    totalPrice: parseFloat(summary.totalPrice || 0),
+    advanceRequired: parseFloat(summary.advanceRequired || Math.round((summary.totalPrice || 0) * 0.30))
+    // totalCost, mezbaanMargin, and marginPct are strictly omitted
+  };
+}
+
+// Admin Verification Endpoint
+app.post('/api/auth/admin-verify', (req, res) => {
+  if (isAuthorizedAdmin(req)) {
+    return res.json({ success: true, role: 'admin', message: 'Admin authenticated' });
+  }
+  const provided = req.body?.secret || req.body?.token;
+  if (provided && provided === MEZBAAN_ADMIN_SECRET) {
+    return res.json({ success: true, token: MEZBAAN_ADMIN_SECRET, role: 'admin' });
+  }
+  return res.status(401).json({ success: false, error: 'Invalid or missing admin credentials' });
+});
+
+// -------------------------------------------------------------
 // 1. STATS / EXECUTIVE SUMMARY
 // -------------------------------------------------------------
 app.get('/api/stats', (req, res) => {
@@ -185,14 +245,38 @@ app.get('/api/events/:id', (req, res) => {
       SELECT * FROM expenses WHERE event_id = ? ORDER BY spent_on DESC
     `).all(req.params.id);
 
+    const isAdmin = isAuthorizedAdmin(req);
+    let safeQuotes = quotes;
+    let safeBookings = bookings;
+    let safeExpenses = expenses;
+
+    if (!isAdmin) {
+      safeQuotes = quotes.map(q => ({
+        quote_id: q.quote_id,
+        event_id: q.event_id,
+        total_price: q.total_price,
+        status: q.status,
+        valid_until: q.valid_until,
+        items: sanitizeCustomerQuoteItems(q.items)
+      }));
+      safeBookings = bookings.map(b => ({
+        booking_id: b.booking_id,
+        event_id: b.event_id,
+        vendor_name: b.vendor_name,
+        status: b.status,
+        booked_on: b.booked_on
+      }));
+      safeExpenses = []; // Internal direct operational expenses are admin-only
+    }
+
     res.json({
       success: true,
       event,
       requirements,
-      quotes,
-      bookings,
+      quotes: safeQuotes,
+      bookings: safeBookings,
       payments,
-      expenses
+      expenses: safeExpenses
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -497,6 +581,9 @@ app.get('/api/services', (req, res) => {
 // 8. QUOTES & QUOTE ITEMS (Costing, Margins, Approval)
 // -------------------------------------------------------------
 app.get('/api/quotes', (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: Admin authorization required to access internal quotations.' });
+  }
   try {
     const quotes = db.prepare(`
       SELECT q.*, e.event_type, e.event_date, e.location, c.name as customer_name, c.phone as customer_phone
@@ -523,6 +610,9 @@ app.get('/api/quotes', (req, res) => {
 });
 
 app.post('/api/quotes', (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: Admin authorization required to create or modify internal quotations.' });
+  }
   try {
     const { event_id, items, valid_until, status } = req.body;
     if (!event_id || !Array.isArray(items) || items.length === 0) {
@@ -1032,38 +1122,70 @@ app.post('/api/quotations/calculate', (req, res) => {
     const mezbaanMargin = totalPrice - totalCost;
     const advanceRequired = Math.round(totalPrice * 0.30); // 30% advance standard
 
-    res.json({
-      success: true,
-      items,
-      summary: {
-        totalCost,
-        totalPrice,
-        mezbaanMargin,
-        advanceRequired,
-        marginPct: Math.round((mezbaanMargin / totalPrice) * 100)
-      }
-    });
+    const isAdmin = isAuthorizedAdmin(req);
+
+    if (isAdmin) {
+      res.json({
+        success: true,
+        items,
+        summary: {
+          totalCost,
+          totalPrice,
+          mezbaanMargin,
+          advanceRequired,
+          marginPct: totalPrice > 0 ? Math.round((mezbaanMargin / totalPrice) * 100) : 0
+        }
+      });
+    } else {
+      // Customer-safe serialization: vendor base costs and margins are completely absent
+      res.json({
+        success: true,
+        items: sanitizeCustomerQuoteItems(items),
+        summary: sanitizeCustomerQuoteSummary({
+          totalPrice,
+          advanceRequired
+        })
+      });
+    }
   } catch (err) {
     console.error('Error calculating quote:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Save or submit requirement sheet
+// Save or submit requirement sheet (Insert or Update)
 app.post('/api/requirement-sheets', (req, res) => {
+  handleSaveRequirementSheet(req, res);
+});
+
+app.put('/api/requirement-sheets/:id', (req, res) => {
+  handleSaveRequirementSheet(req, res);
+});
+
+function handleSaveRequirementSheet(req, res) {
   try {
     const { formData, quoteItems, quoteSummary } = req.body;
     if (!formData) {
       return res.status(400).json({ success: false, message: 'Form data is required' });
     }
 
+    const targetSheetId = req.params?.id || req.body?.sheetId || formData.sheetId;
     const customerName = formData.customerName || formData.contactPerson || 'Customer Lead';
     const mobile = formData.mobile || formData.whatsapp || '9999999999';
-    const email = formData.email || `${mobile}@mezban.in`;
-    const eventType = formData.eventType || 'Event';
+    const email = formData.email || `${mobile.replace(/\D/g, '')}@mezban.in`;
+    const eventType = Array.isArray(formData.eventTypes) && formData.eventTypes.length > 0
+      ? formData.eventTypes.join(' & ')
+      : (formData.eventType || 'Wedding / Event');
     const eventDate = formData.eventDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
     const guestCount = parseInt(formData.approxGuestCount || formData.guestCount || 300, 10);
     const leadStatus = formData.leadStatus || 'Level 1 – Potential';
+
+    // Embed latest quote items and summary in formData for full preservation
+    const fullFormData = {
+      ...formData,
+      quoteItems: Array.isArray(quoteItems) ? quoteItems : (formData.quoteItems || []),
+      quoteSummary: quoteSummary || formData.quoteSummary || {}
+    };
 
     // 1. Ensure customer exists or create
     let customer = db.prepare('SELECT customer_id FROM customers WHERE phone = ?').get(mobile);
@@ -1079,7 +1201,104 @@ app.post('/api/requirement-sheets', (req, res) => {
       customerId = cInfo.lastInsertRowid;
     }
 
-    // 2. Ensure event exists or create
+    // 2. Check if we are updating an existing sheet
+    if (targetSheetId && !String(targetSheetId).startsWith('local_')) {
+      const existingSheet = db.prepare('SELECT * FROM requirement_sheets WHERE sheet_id = ?').get(targetSheetId);
+      if (existingSheet) {
+        const eventId = existingSheet.event_id;
+        let quoteId = existingSheet.quotation_id;
+        const budget = quoteSummary?.totalPrice || parseFloat(formData.approxBudget) || 200000;
+
+        // Update event
+        if (eventId) {
+          db.prepare(`
+            UPDATE events 
+            SET customer_id = ?, event_type = ?, event_date = ?, location = ?, guest_count = ?, budget = ?
+            WHERE event_id = ?
+          `).run(customerId, eventType, eventDate, formData.venueArea || 'Beed', guestCount, budget, eventId);
+        }
+
+        // Update or insert Quote & Quote Items
+        if (Array.isArray(quoteItems) && quoteItems.length > 0) {
+          let totalCost = 0;
+          let totalPrice = 0;
+          quoteItems.forEach(it => {
+            totalCost += parseFloat(it.vendor_cost || 0);
+            totalPrice += parseFloat(it.customer_price || 0);
+          });
+          const mezbaanMargin = totalPrice - totalCost;
+
+          if (quoteId) {
+            db.prepare(`
+              UPDATE quotes
+              SET total_cost = ?, mezbaan_margin = ?, total_price = ?
+              WHERE quote_id = ?
+            `).run(totalCost, mezbaanMargin, totalPrice, quoteId);
+
+            db.prepare('DELETE FROM quote_items WHERE quote_id = ?').run(quoteId);
+          } else {
+            const qInfo = db.prepare(`
+              INSERT INTO quotes (event_id, total_cost, mezbaan_margin, total_price, status, valid_until)
+              VALUES (?, ?, ?, ?, 'Draft', ?)
+            `).run(
+              eventId || null,
+              totalCost,
+              mezbaanMargin,
+              totalPrice,
+              new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+            );
+            quoteId = qInfo.lastInsertRowid;
+          }
+
+          const itemStmt = db.prepare(`
+            INSERT INTO quote_items (quote_id, vendor_id, service_id, vendor_cost, customer_price)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+          for (const it of quoteItems) {
+            itemStmt.run(
+              quoteId,
+              it.vendor_id || null,
+              it.service_id || null,
+              parseFloat(it.vendor_cost) || 0,
+              parseFloat(it.customer_price) || 0
+            );
+          }
+        }
+
+        // Update requirement_sheets record
+        db.prepare(`
+          UPDATE requirement_sheets
+          SET customer_name = ?, contact_person = ?, mobile = ?, whatsapp = ?, email = ?,
+              event_type = ?, event_date = ?, guest_count = ?, form_data = ?, lead_status = ?,
+              quotation_id = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE sheet_id = ?
+        `).run(
+          customerName,
+          formData.contactPerson || customerName,
+          mobile,
+          formData.whatsapp || mobile,
+          email,
+          eventType,
+          eventDate,
+          guestCount,
+          JSON.stringify(fullFormData),
+          leadStatus,
+          quoteId,
+          targetSheetId
+        );
+
+        return res.json({
+          success: true,
+          sheet_id: Number(targetSheetId),
+          event_id: eventId,
+          customer_id: customerId,
+          quote_id: quoteId,
+          message: 'Customer requirement sheet updated successfully'
+        });
+      }
+    }
+
+    // 3. New Record Insertion
     const budget = quoteSummary?.totalPrice || parseFloat(formData.approxBudget) || 200000;
     const eInfo = db.prepare(`
       INSERT INTO events (customer_id, event_type, event_date, location, guest_count, budget, status)
@@ -1087,7 +1306,7 @@ app.post('/api/requirement-sheets', (req, res) => {
     `).run(customerId, eventType, eventDate, formData.venueArea || 'Beed', guestCount, budget);
     const eventId = eInfo.lastInsertRowid;
 
-    // 3. Create Quote and Quote Items if quoteItems provided
+    // Create Quote & Quote Items if provided
     let quoteId = null;
     if (Array.isArray(quoteItems) && quoteItems.length > 0) {
       let totalCost = 0;
@@ -1115,11 +1334,17 @@ app.post('/api/requirement-sheets', (req, res) => {
         VALUES (?, ?, ?, ?, ?)
       `);
       for (const it of quoteItems) {
-        itemStmt.run(quoteId, it.vendor_id || null, it.service_id || null, it.vendor_cost, it.customer_price);
+        itemStmt.run(
+          quoteId,
+          it.vendor_id || null,
+          it.service_id || null,
+          parseFloat(it.vendor_cost) || 0,
+          parseFloat(it.customer_price) || 0
+        );
       }
     }
 
-    // 4. Save to requirement_sheets table
+    // Save to requirement_sheets table
     const sheetInfo = db.prepare(`
       INSERT INTO requirement_sheets (
         event_id, customer_id, customer_name, contact_person, mobile, whatsapp, email,
@@ -1137,7 +1362,7 @@ app.post('/api/requirement-sheets', (req, res) => {
       eventType,
       eventDate,
       guestCount,
-      JSON.stringify(formData),
+      JSON.stringify(fullFormData),
       leadStatus,
       quoteId
     );
@@ -1154,7 +1379,7 @@ app.post('/api/requirement-sheets', (req, res) => {
     console.error('Error saving requirement sheet:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
+}
 
 // List all requirement sheets
 app.get('/api/requirement-sheets', (req, res) => {
@@ -1193,14 +1418,54 @@ app.get('/api/requirement-sheets/:id', (req, res) => {
       `).all(sheet.quotation_id);
     }
 
+    const isAdmin = isAuthorizedAdmin(req);
+    let safeQuote = quote;
+    let safeQuoteItems = quoteItems;
+    let safeFormData = typeof sheet.form_data === 'string' ? JSON.parse(sheet.form_data) : sheet.form_data;
+
+    // Use embedded quoteItems/quoteSummary if SQL relational tables don't have custom items
+    if ((!safeQuoteItems || safeQuoteItems.length === 0) && safeFormData && Array.isArray(safeFormData.quoteItems)) {
+      safeQuoteItems = safeFormData.quoteItems;
+    }
+    if (!safeQuote && safeFormData && safeFormData.quoteSummary) {
+      safeQuote = {
+        total_price: safeFormData.quoteSummary.totalPrice,
+        total_cost: safeFormData.quoteSummary.totalCost,
+        mezbaan_margin: safeFormData.quoteSummary.mezbaanMargin,
+        status: 'Draft'
+      };
+    }
+
+    if (!isAdmin) {
+      if (safeQuote) {
+        safeQuote = {
+          quote_id: safeQuote.quote_id,
+          event_id: safeQuote.event_id,
+          total_price: safeQuote.total_price,
+          status: safeQuote.status,
+          valid_until: safeQuote.valid_until
+        };
+      }
+      safeQuoteItems = sanitizeCustomerQuoteItems(safeQuoteItems);
+
+      // Clean internal costing notes from form_data if present
+      if (safeFormData && typeof safeFormData === 'object') {
+        const cleaned = { ...safeFormData };
+        delete cleaned.vendorCostEstimate;
+        delete cleaned.expectedProfit;
+        delete cleaned.mezbanCoordFee;
+        safeFormData = cleaned;
+      }
+    }
+
     res.json({
       success: true,
       sheet: {
         ...sheet,
-        form_data: typeof sheet.form_data === 'string' ? JSON.parse(sheet.form_data) : sheet.form_data
+        form_data: safeFormData
       },
-      quote,
-      quoteItems
+      quote: safeQuote,
+      quoteItems: safeQuoteItems
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
