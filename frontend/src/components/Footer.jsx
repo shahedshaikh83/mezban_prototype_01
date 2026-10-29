@@ -1,5 +1,6 @@
 import React from 'react';
 import { Crown, MapPin, Phone, Mail, Clock, CheckCircle } from 'lucide-react';
+import mezbaanLogo from '../assets/mezbaan-logo.jpg';
 
 export default function Footer({ setActivePortal, openPlanModal }) {
   return (
@@ -24,14 +25,20 @@ export default function Footer({ setActivePortal, openPlanModal }) {
                 width: 38,
                 height: 38,
                 borderRadius: 8,
-                background: '#0a291f',
+                overflow: 'hidden',
+                background: '#000000',
                 border: '1.5px solid #d4af37',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#d4af37'
+                boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                flexShrink: 0
               }}>
-                <Crown size={20} />
+                <img 
+                  src={mezbaanLogo} 
+                  alt="Mezbaan Royal Emblem" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               </div>
               <span style={{ fontSize: '1.35rem', fontWeight: 800, color: '#f3c64c', fontFamily: 'Outfit' }}>
                 MEZBAAN

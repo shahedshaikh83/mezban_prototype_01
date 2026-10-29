@@ -1,4 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0B4D3A;
+  --color-primary-light: #E6F2EC;
+  --color-gold: #F4C542;
+  --color-gold-light: #FFF8E1;
+  --color-gold-border: #F3DFA2;
+  --color-cream: #FAF8F3;
+  --color-text: #1F2937;
+  --color-muted: #6B7280;
+  --color-danger: #EF4444;
+}
 
 :root {
   --brand-dark: #0a291f;
@@ -29,22 +41,24 @@
   --font-body: 'Plus Jakarta Sans', sans-serif;
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-html, body {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden !important;
-  font-family: var(--font-body);
-  background-color: var(--bg-main);
-  color: var(--text-primary);
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  -webkit-text-size-adjust: 100%;
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden !important;
+    font-family: var(--font-body);
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+  }
 }
 
 #root {
@@ -72,9 +86,6 @@ a {
 button {
   font-family: var(--font-body);
   cursor: pointer;
-  border: none;
-  background: none;
-  outline: none;
   touch-action: manipulation;
 }
 

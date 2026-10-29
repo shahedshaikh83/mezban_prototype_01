@@ -1255,10 +1255,22 @@ function handleSaveRequirementSheet(req, res) {
             VALUES (?, ?, ?, ?, ?)
           `);
           for (const it of quoteItems) {
+            let vId = it.vendor_id ? Number(it.vendor_id) : null;
+            let sId = it.service_id ? Number(it.service_id) : null;
+
+            if (vId) {
+              const vRow = db.prepare('SELECT 1 FROM vendors WHERE vendor_id = ?').get(vId);
+              if (!vRow) vId = null;
+            }
+            if (sId) {
+              const sRow = db.prepare('SELECT 1 FROM services WHERE service_id = ?').get(sId);
+              if (!sRow) sId = null;
+            }
+
             itemStmt.run(
               quoteId,
-              it.vendor_id || null,
-              it.service_id || null,
+              vId,
+              sId,
               parseFloat(it.vendor_cost) || 0,
               parseFloat(it.customer_price) || 0
             );
@@ -1334,10 +1346,22 @@ function handleSaveRequirementSheet(req, res) {
         VALUES (?, ?, ?, ?, ?)
       `);
       for (const it of quoteItems) {
+        let vId = it.vendor_id ? Number(it.vendor_id) : null;
+        let sId = it.service_id ? Number(it.service_id) : null;
+
+        if (vId) {
+          const vRow = db.prepare('SELECT 1 FROM vendors WHERE vendor_id = ?').get(vId);
+          if (!vRow) vId = null;
+        }
+        if (sId) {
+          const sRow = db.prepare('SELECT 1 FROM services WHERE service_id = ?').get(sId);
+          if (!sRow) sId = null;
+        }
+
         itemStmt.run(
           quoteId,
-          it.vendor_id || null,
-          it.service_id || null,
+          vId,
+          sId,
           parseFloat(it.vendor_cost) || 0,
           parseFloat(it.customer_price) || 0
         );

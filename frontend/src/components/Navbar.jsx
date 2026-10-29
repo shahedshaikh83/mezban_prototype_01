@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Crown, Sparkles, Shield, Calendar, FileText, Menu, X, ChevronRight } from 'lucide-react';
+import mezbaanLogo from '../assets/mezbaan-logo.jpg';
 
 export default function Navbar({ activePortal, setActivePortal, openPlanModal, openRequirementSheet }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -56,12 +57,6 @@ export default function Navbar({ activePortal, setActivePortal, openPlanModal, o
             Enterprise Event Planning & Catering Platform
           </span>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.72rem', color: '#cadbd2' }}>
-          <span className="market-region-tag" style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: 8 }}>
-            Beed • Kaij • Ambajogai • Gevrai
-          </span>
-        </div>
       </div>
 
       {/* Main Brand & Unified Navigation Header */}
@@ -86,16 +81,20 @@ export default function Navbar({ activePortal, setActivePortal, openPlanModal, o
               width: 40,
               height: 40,
               borderRadius: 8,
-              background: 'linear-gradient(135deg, #0f3d2e 0%, #0a291f 100%)',
+              overflow: 'hidden',
+              background: '#000000',
               border: '1.5px solid #d4af37',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#d4af37',
               boxShadow: '0 3px 10px rgba(212, 175, 55, 0.25)',
               flexShrink: 0
             }}>
-              <Crown size={22} />
+              <img 
+                src={mezbaanLogo} 
+                alt="Mezbaan Royal Emblem" 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
