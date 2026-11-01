@@ -29,14 +29,14 @@ export default function Header({
           <div className="w-10 h-10 rounded-xl overflow-hidden bg-black flex items-center justify-center shadow-md border border-[#d4af37]/60 group-hover:scale-105 transition-transform duration-200 shrink-0">
             <img 
               src={mezbaanLogo} 
-              alt="Mezbaan Royal Emblem" 
+              alt="Mezban Royal Emblem" 
               className="w-full h-full object-cover"
             />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5 leading-none">
               <span className="font-extrabold text-xl tracking-tight text-[#0B4D3A]">
-                MEZBAAN
+                MEZBAN
               </span>
               <span className="text-xs font-bold text-[#F4C542] tracking-wider uppercase bg-[#FFF8E1] px-1.5 py-0.5 rounded border border-[#F3DFA2]">
                 EVENTS

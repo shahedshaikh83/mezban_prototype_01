@@ -358,7 +358,7 @@ To confirm this booking, reply to this message or call Mezban Support: +91 98220
                 </div>
                 <div>
                   <h1 style={{ margin: 0, fontSize: '1.55rem', fontWeight: 900, color: '#0f3d2e' }}>
-                    MEZBAAN EVENTS & WEDDINGS
+                    MEZBAN EVENTS & WEDDINGS
                   </h1>
                   <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#6b7280' }}>
                     Central Operating Engine • Internal Margin & Allocation Sheet

@@ -34,12 +34,18 @@ export default function Step4GuestsDining({ formData, onChange, errors = {} }) {
         <SelectField
           label="Food Preference"
           name="foodPreference"
-          value={formData.foodPreference || 'Both Veg & Non-Veg'}
+          value={
+            formData.foodPreference === 'Non-Veg Only'
+              ? 'Non-Veg'
+              : formData.foodPreference === 'Pure Veg'
+                ? 'Veg'
+                : (formData.foodPreference || 'Both Veg & Non-Veg')
+          }
           onChange={(e) => onChange('foodPreference', e.target.value)}
           options={[
-            { value: 'Both Veg & Non-Veg', label: 'Both Veg & Non-Veg' },
-            { value: 'Non-Veg Only', label: 'Non-Veg Dominant (Halal Dum Biryani / Mughlai)' },
-            { value: 'Veg', label: 'Pure Veg Catering' }
+            { value: 'Veg', label: 'Veg' },
+            { value: 'Non-Veg', label: 'Non-Veg' },
+            { value: 'Both Veg & Non-Veg', label: 'Both Veg & Non-Veg' }
           ]}
           icon={UtensilsCrossed}
           required

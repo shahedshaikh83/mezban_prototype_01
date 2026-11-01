@@ -28,22 +28,18 @@ export default function SidebarStepItem({
         >
           <Icon className="w-5 h-5" />
 
-          {/* Number badge on bottom right */}
-          <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shadow-xs
-            ${isCompleted
-              ? 'bg-emerald-600 text-white'
-              : isActive
-                ? 'bg-[#F4C542] text-[#0B4D3A]'
-                : 'bg-gray-300 text-gray-700'}
-          `}>
-            {isCompleted ? <Check className="w-2.5 h-2.5 stroke-[3]" /> : stepNumber}
-          </span>
+          {/* Checkmark badge if completed */}
+          {isCompleted && (
+            <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shadow-xs bg-emerald-600 text-white">
+              <Check className="w-2.5 h-2.5 stroke-[3]" />
+            </span>
+          )}
         </button>
 
         {/* Hover Tooltip when collapsed */}
         <div className="absolute left-14 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
           <div className="bg-gray-900 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex flex-col gap-0.5">
-            <span>{stepNumber}. {step.title}</span>
+            <span>{step.title}</span>
             <span className="text-[10px] text-gray-400 font-normal">{step.subtitle}</span>
           </div>
           {/* Tooltip triangle */}
@@ -77,18 +73,13 @@ export default function SidebarStepItem({
           <Icon className="w-4 h-4" />
         </div>
 
-        {/* Checkmark or Step Number */}
+        {/* Checkmark */}
         {isCompleted && (
           <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xs">
             <Check className="w-2.5 h-2.5 stroke-[3]" />
           </div>
         )}
       </div>
-
-      {/* Step Number Badge */}
-      <span className={`text-xs font-bold w-4 text-center shrink-0 ${isActive ? 'text-[#0B4D3A]' : 'text-gray-400'}`}>
-        {stepNumber}
-      </span>
 
       {/* Title & Subtitle */}
       <div className="flex flex-col min-w-0 flex-1 leading-tight overflow-hidden">

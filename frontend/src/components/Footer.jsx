@@ -2,7 +2,7 @@ import React from 'react';
 import { Crown, MapPin, Phone, Mail, Clock, CheckCircle } from 'lucide-react';
 import mezbaanLogo from '../assets/mezbaan-logo.jpg';
 
-export default function Footer({ setActivePortal, openPlanModal }) {
+export default function Footer({ openPlanModal }) {
   return (
     <footer style={{
       background: 'linear-gradient(180deg, #0f3d2e 0%, #071f17 100%)',
@@ -14,8 +14,8 @@ export default function Footer({ setActivePortal, openPlanModal }) {
       <div className="container">
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
-          gap: 40,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+          gap: 48,
           marginBottom: 50
         }}>
           {/* Col 1: Brand Ethos */}
@@ -36,74 +36,45 @@ export default function Footer({ setActivePortal, openPlanModal }) {
               }}>
                 <img 
                   src={mezbaanLogo} 
-                  alt="Mezbaan Royal Emblem" 
+                  alt="Mezban Royal Emblem" 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               </div>
               <span style={{ fontSize: '1.35rem', fontWeight: 800, color: '#f3c64c', fontFamily: 'Outfit' }}>
-                MEZBAAN
+                MEZBAN
               </span>
             </div>
             <p style={{ fontSize: '0.88rem', color: '#cadbd2', lineHeight: 1.7, marginBottom: 16 }}>
-              Aapka Event, Hamari Zimmedari. We serve as your complete event planning, coordination, and vendor execution partner across Beed, Kaij, Ambajogai, and Gevrai.
+              Aapka Event, Hamari Zimmedari. We serve as your complete event planning, coordination, and vendor execution partner across Beed.
             </p>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(212, 175, 55, 0.15)', padding: '6px 14px', borderRadius: 20, border: '1px solid rgba(212,175,55,0.3)', color: '#f5deb3', fontSize: '0.8rem', fontWeight: 600 }}>
-              <CheckCircle size={14} color="#f3c64c" /> 100% Verified Local Vendors
+              <CheckCircle size={14} color="#f3c64c" /> 100% Verified Local Vendors in Beed
             </div>
           </div>
 
-          {/* Col 2: Operating Regions */}
+          {/* Col 2: Operating Market (Beed Only) */}
           <div>
             <h4 style={{ color: '#f3c64c', fontSize: '1.05rem', marginBottom: 18, fontFamily: 'Outfit' }}>
-              OPERATING MARKETS
+              OPERATING MARKET
             </h4>
-            <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.88rem', color: '#cadbd2', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MapPin size={16} color="#d4af37" /> <strong>Beed City</strong> (Jalna Rd, Subhash Rd, Stadium)
+            <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.88rem', color: '#cadbd2', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <li style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <MapPin size={18} color="#d4af37" style={{ marginTop: 2, flexShrink: 0 }} />
+                <div>
+                  <strong style={{ color: '#ffffff', fontSize: '0.95rem' }}>Beed City</strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#9cb5a8', lineHeight: 1.5 }}>
+                    Jalna Road, Near Stadium, Subhash Road, Old City & Bypass Lawns
+                  </p>
+                </div>
               </li>
-              <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MapPin size={16} color="#d4af37" /> <strong>Kaij</strong> (Kaij Bypass, Vidya Nagar)
-              </li>
-              <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MapPin size={16} color="#d4af37" /> <strong>Ambajogai</strong> (Temple Rd, Civil Lines)
-              </li>
-              <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MapPin size={16} color="#d4af37" /> <strong>Gevrai</strong> (NH 52, Shivaji Chowk)
-              </li>
-              <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MapPin size={16} color="#d4af37" /> <strong>Majalgaon & Surrounding Districts</strong>
+              <li style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#cadbd2', fontSize: '0.84rem' }}>
+                <CheckCircle size={15} color="#d4af37" style={{ flexShrink: 0 }} />
+                <span>Dedicated on-ground coordination for all banquet halls & lawns across Beed</span>
               </li>
             </ul>
           </div>
 
-          {/* Col 3: Portals & Architecture */}
-          <div>
-            <h4 style={{ color: '#f3c64c', fontSize: '1.05rem', marginBottom: 18, fontFamily: 'Outfit' }}>
-              PLATFORM PORTALS
-            </h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: '0.88rem' }}>
-              <a onClick={() => setActivePortal('website')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Public Website & Event Catalogue
-              </a>
-              <a onClick={() => setActivePortal('requirements')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Customer Event Requirement Intake
-              </a>
-              <a onClick={() => setActivePortal('admin', 'dashboard')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Admin OS: Central Management Console
-              </a>
-              <a onClick={() => setActivePortal('admin', 'customer')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Admin OS: Customer Portal & Invoices
-              </a>
-              <a onClick={() => setActivePortal('admin', 'vendor')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Admin OS: Vendor Partner Portal
-              </a>
-              <a onClick={() => setActivePortal('admin', 'database')} style={{ cursor: 'pointer', color: '#cadbd2' }}>
-                • Admin OS: Central ER Database (SQLite)
-              </a>
-            </div>
-          </div>
-
-          {/* Col 4: Contact & Office */}
+          {/* Col 3: Contact & Office */}
           <div>
             <h4 style={{ color: '#f3c64c', fontSize: '1.05rem', marginBottom: 18, fontFamily: 'Outfit' }}>
               GET IN TOUCH
@@ -145,7 +116,7 @@ export default function Footer({ setActivePortal, openPlanModal }) {
           color: '#8fa99c'
         }}>
           <div>
-            © {new Date().getFullYear()} MEZBAAN EVENTS & CELEBRATIONS. Prepared for Rizwan, Shahid & Tausif.
+            © {new Date().getFullYear()} MEZBAN EVENTS & CELEBRATIONS. Prepared for Rizwan, Shahid & Tausif.
           </div>
           <div>
             Built with Relational SQLite Architecture • Zero Placeholders • 100% Real Database

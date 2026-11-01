@@ -50,11 +50,11 @@ export default function Navbar({ activePortal, setActivePortal, openPlanModal, o
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700, color: '#f3c64c' }}>
-            <Crown size={14} /> MEZBAAN OS
+            <Crown size={14} /> MEZBAN
           </span>
           <span style={{ opacity: 0.6 }}>•</span>
           <span style={{ color: '#d1ded8', fontSize: '0.74rem' }}>
-            Enterprise Event Planning & Catering Platform
+            Events and celebrations
           </span>
         </div>
       </div>
@@ -92,14 +92,14 @@ export default function Navbar({ activePortal, setActivePortal, openPlanModal, o
             }}>
               <img 
                 src={mezbaanLogo} 
-                alt="Mezbaan Royal Emblem" 
+                alt="Mezban Royal Emblem" 
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 'clamp(1.15rem, 3.5vw, 1.45rem)', fontWeight: 800, color: '#0f3d2e', letterSpacing: '0.03em', fontFamily: 'Outfit', lineHeight: 1.1 }}>
-                  MEZBAAN
+                  MEZBAN
                 </span>
                 <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#b38f20', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Events

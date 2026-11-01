@@ -769,10 +769,10 @@ To lock this event date with Mezbaan, please reply to this message or contact ou
                 </div>
                 <div>
                   <h1 style={{ margin: 0, fontSize: '1.55rem', fontWeight: 900, color: '#0f3d2e', letterSpacing: '0.02em', fontFamily: 'Outfit' }}>
-                    MEZBAAN EVENTS & WEDDINGS
+                    MEZBAN EVENTS & WEDDINGS
                   </h1>
                   <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#6b7280', fontWeight: 500 }}>
-                    Aapka Event, Hamari Zimmedari • Beed • Kaij • Ambajogai • Gevrai
+                    Aapka Event, Hamari Zimmedari • Beed
                   </p>
                 </div>
               </div>

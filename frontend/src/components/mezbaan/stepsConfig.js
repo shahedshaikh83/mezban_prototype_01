@@ -49,7 +49,7 @@ export const MEZBAAN_12_STEPS = [
   {
     id: 'catering-reqs',
     number: 5,
-    title: 'Catering Requirements',
+    title: 'Menu Selection',
     subtitle: 'Menu and catering details',
     sectionSubtitle: 'Authentic Beed Mughlai & Dum Biryani menu selections and plate budgeting.',
     icon: Utensils
